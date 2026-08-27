@@ -1,0 +1,22 @@
+[server]
+baseUrlPath = "lootledger"
+enableCORS = false
+enableXsrfProtection = false
+maxUploadSize = 500
+
+[client]
+# Developer mode is what binds Streamlit's "C" = clear caches and "R" = rerun
+# shortcuts, and pressing C while typing anywhere outside a text box fired the
+# clear-caches overlay. This is a finished app being used, not one being
+# debugged, so the developer toolbar and its shortcuts are switched off.
+toolbarMode = "viewer"
+
+# The Departure Board world is a dark enamel panel. Committing the theme here
+# stops Streamlit's own light default from fighting the stylesheet on first paint.
+[theme]
+base = "dark"
+primaryColor = "#FFB300"
+backgroundColor = "#07090C"
+secondaryBackgroundColor = "#0E1116"
+textColor = "#E9EDF2"
+font = "sans serif"

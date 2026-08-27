@@ -1,0 +1,31 @@
+# --- secrets -----------------------------------------------------------
+# The Gemini API key. Never commit this.
+.streamlit/secrets.toml
+
+# --- personal financial data -------------------------------------------
+# The ledger itself, every backup of it, and any sheet imported into it.
+# The plain "tracker.db" line missed the timestamped backups, which hold the
+# same real records; the spreadsheet carries real names and amounts too.
+tracker.db
+tracker.db.*
+*.sqlite
+*.sqlite3
+finance_data.csv
+*.xlsx
+*.xls
+*.csv
+
+# --- logs ---------------------------------------------------------------
+# "run.log" alone missed lootledger.log, written by the launcher on every run.
+*.log
+
+# --- packaging / archives ----------------------------------------------
+lootledger.zip
+*.zip
+
+# --- python -------------------------------------------------------------
+__pycache__/
+*.pyc
+.venv/
+venv/
+.impeccable/
