@@ -1,0 +1,141 @@
+# Loot Ledger
+
+A personal cash tracker built as a station **departure board**: money arriving and
+money leaving read as arrivals and departures on one enamel panel, with each
+month opening on the balance the last one closed at.
+
+Streamlit + SQLite, hand-authored SVG charts, and a Gemini-backed Finance Bot
+that can write to the ledgers from a plain sentence, a spreadsheet, or a photo
+of a receipt.
+
+Built by [Muhammad Ali Akbar](https://www.linkedin.com/in/muhammad-ali-akbar-khan-7b37b8197).
+
+---
+
+## What it does
+
+**The board.** Four split-flap figures across the top — brought forward,
+arrivals, departures, on hand — over two opposed columns listing every movement
+with its platform (category), date and amount. A status lamp reports the period
+as on track, running warm, over budget, or no service.
+
+**Real carryover.** Months are not islands. Each month opens on the previous
+month's closing balance, so a good month visibly funds the next one. An
+**opening balance** seeds the first month for savings that predate the board,
+without inventing a transaction that never happened.
+
+**Honest debt maths.** Lending is cash leaving now; being repaid is cash coming
+back. Borrowing is cash arriving; repaying is cash leaving. A debt opened and
+settled inside one month nets to nothing, so by default it is kept out of both
+headline totals rather than inflating each by its value — a toggle in Settings
+restores both legs. Outstanding obligations are reported separately from
+spendable cash.
+
+**Light and dark.** A full contrast inversion, not a colour swap. The split-flap
+tiles stay dark in both modes on purpose: they are the physical mechanism of the
+board, and a real one does not change colour when the room does.
+
+**Five display currencies.** PKR, USD, GBP, EUR and AED, converted on the way to
+the screen only. Records stay stored in rupees exactly as entered, so switching
+back restores the original figures precisely. Rates refresh once a day and fall
+back to the last known set when offline.
+
+**Budgets and pacing.** A monthly cap per category, drawn as a capacity bar on
+the Platform Load panel, plus a projected month-end close from the current daily
+burn.
+
+**Recurring entries and debt ageing.** Rent, subscriptions and salary are logged
+from a template once their day arrives. Unsettled debts past 30 days are called
+out with the number of days they have been outstanding.
+
+**The Finance Bot.** Streams its replies and holds live tool access:
+`log_expense`, `log_transport`, `log_income`, `log_lent`, `log_borrowed`,
+`settle_debt`, plus read tools (`month_summary`, `list_open_debts`) so it can
+answer about months that are not on screen. It cites the figures it used.
+Conversations survive a refresh. The free tier meters requests per model per
+day, so the bot walks a chain of models rather than failing when one runs dry.
+
+**CSV and Excel import.** Drop in a sheet and every block of columns goes to the
+ledger it belongs to — spending, income, lent and borrowed all land in one pass.
+Handles multi-sheet workbooks, banner rows above the real header, several date
+formats, currency noise, and totals rows (which are recognised, not banked).
+
+**Backup.** Every record in every ledger as one flat CSV, readable in any
+spreadsheet and re-importable section by section.
+
+**Sample data.** Three months of generated records so the board can be seen with
+data in it. Labelled with a banner the whole time it is loaded, and one click to
+clear. Nothing generated is ever presented as a real record.
+
+---
+
+## Setup
+
+```bash
+pip install -r requirements.txt
+```
+
+Add your Gemini API key to `.streamlit/secrets.toml`:
+
+```toml
+GEMINI_API_KEY = "your-key-here"
+# optional — any model your key can reach
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+```
+
+The board works fully without a key. Only the Finance Bot needs one, and it says
+so plainly when the key is missing.
+
+### Running it
+
+```bash
+python -m streamlit run app.py
+```
+
+`python -m streamlit` rather than a bare `streamlit`, which is not on PATH in
+every install. On Windows, **`Start Loot Ledger.vbs`** does the same thing with
+no console window and opens the browser for you; **`Stop Loot Ledger.bat`**
+shuts the server down.
+
+Opens at `http://localhost:8501/lootledger` (the base path is set in
+`.streamlit/config.toml`). Data lives in `tracker.db`, created on first run.
+
+Set `LOOT_LEDGER_DB` to point at a different SQLite file — useful for running a
+scratch instance beside your real one.
+
+> **Your data never leaves the folder.** `tracker.db`, any spreadsheet you
+> import, and `.streamlit/secrets.toml` are all gitignored. Keep it that way:
+> the database holds your complete financial history and the secrets file holds
+> a live API key.
+
+---
+
+## Layout
+
+| File | Holds |
+|---|---|
+| `app.py` | Composition and layout. Opens with the direction contract. |
+| `theme.py` | Design tokens and the whole stylesheet — the visual world. |
+| `icons.py` | Authored SVG icon set: one 24 grid, one 1.6 stroke weight. |
+| `finance.py` | The money model. Carryover, debt cash movement, formatting. |
+| `db.py` | SQLite schema, migrations, queries. |
+| `bot.py` | Gemini streaming, tool definitions, system context, model fallback. |
+| `importer.py` | CSV and Excel reading, column guessing, row building. |
+| `rates.py` | Daily FX rates, cached in `meta`, with an offline fallback. |
+| `demo.py` | Labelled sample data. |
+| `DESIGN.md` | The design system, recorded from the built result. |
+| `PRODUCT.md` | Product truth: users, constraints, principles. |
+
+---
+
+## Notes
+
+- Amounts are stored as **integer paisa**, never rupee floats: a REAL column
+  drifts over enough fractional arithmetic, an integer one cannot. Conversion
+  happens at the storage boundary, so the rest of the app works in rupees.
+- Dates are entered and shown as DD/MM/YYYY, stored as ISO.
+- Designed for desktop. The board reflows to a 2x2 figure grid when the bot
+  panel is open, via container queries.
+- Transport is both its own ledger and a spending category; the two are summed
+  into one "Transportation" platform for charts. Whether to merge them properly
+  is still open.

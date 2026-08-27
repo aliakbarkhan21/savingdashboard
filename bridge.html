@@ -1,0 +1,38 @@
+<!-- Click bridge for the board rows.
+
+     The board is rendered as one HTML block, so a Streamlit button cannot be
+     placed on a row. Each row instead carries its identity in data-rm, and
+     this forwards a click to the matching (off-screen) Streamlit button —
+     turning row selection into an ordinary widget interaction, a rerun rather
+     than the full page load an <a href> caused.
+
+     Handlers are re-bound on every render rather than registered once.
+     Streamlit rebuilds this frame on each rerun, and a listener registered
+     from inside it dies with its frame: the click still fires, but the
+     function behind it belongs to a realm that no longer exists, so only the
+     first click ever works. Assigning .onclick is self-replacing, so rows
+     cannot accumulate duplicate handlers either. -->
+<script>
+(function () {
+  var doc = window.parent.document;
+  var tries = 0;
+  function bind() {
+    var rows = doc.querySelectorAll('.ll-row.is-clickable');
+    if (!rows.length && tries++ < 40) { setTimeout(bind, 50); return; }
+    rows.forEach(function (row) {
+      row.onclick = function (e) {
+        e.preventDefault();
+        var token = row.getAttribute('data-rm');
+        if (!token) { return; }
+        var btn = doc.querySelector('.st-key-rm_' + token + ' button');
+        if (btn) { btn.click(); }
+      };
+      row.onkeydown = function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') { return; }
+        row.onclick(e);
+      };
+    });
+  }
+  bind();
+})();
+</script>
