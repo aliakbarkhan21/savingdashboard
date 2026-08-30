@@ -948,6 +948,46 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
               opacity 220ms ease;
   will-change: max-width;
 }
+/* On a phone there is no room for the sidebar (left) AND a side-by-side
+   board+rail split, so below this width Streamlit's own column stacking
+   would otherwise drop the rail beneath the board instead of beside it. The
+   rail is pulled out of that flow and pinned as a right-edge overlay instead
+   — the same drawer behaviour the sidebar already has, mirrored to the other
+   edge — so it still reads as sliding in from the side, not appearing at the
+   bottom of a scroll. position:fixed removes it from flow entirely, so this
+   applies regardless of whether the row itself is row- or column-flex. */
+@media (max-width: 680px) {
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .ll-stage-marker)
+    > [data-testid="stColumn"]:last-child {
+    position: fixed !important;
+    top: 0 !important; right: 0 !important; bottom: 0 !important;
+    height: 100dvh !important;
+    width: min(88vw, 380px) !important;
+    max-width: min(88vw, 380px) !important;
+    z-index: 1000 !important;
+    background: var(--panel) !important;
+    border-left: 1px solid var(--rule-2) !important;
+    box-shadow: -12px 0 32px var(--board-shadow) !important;
+    padding: var(--s4) var(--s4) var(--s3) !important;
+    overflow-y: auto !important;
+    transition: transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1) !important;
+  }
+  /* A dimmed scrim so the board reads as backgrounded behind the panel — not
+     interactive (no tap-to-close) since forwarding that tap into a Streamlit
+     rerun needs the same click-bridge trickery as the board rows use, which
+     isn't worth it when the panel's own close button already does the job. */
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .ll-stage-marker)::before {
+    content: ""; position: fixed; inset: 0;
+    background: rgba(var(--void-rgb), 0.55);
+    z-index: 999; pointer-events: none;
+  }
+  .st-key-close_bot_mobile { display: block !important; position: absolute !important;
+    top: var(--s3) !important; right: var(--s3) !important; width: 32px !important; z-index: 2; }
+}
+/* Hidden outside the breakpoint above: the toolbar's own "Close bot" button
+   already covers desktop, where the rail is a normal in-flow column and this
+   corner control would be redundant clutter. */
+.st-key-close_bot_mobile { display: none; }
 .ll-stage-marker { display: none; }
 /* The marker is hidden, but Streamlit still gives its element container a
    slot in the column's flex gap — 16px of nothing above the board. Removed
@@ -1405,6 +1445,13 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   .ll-col { border-right: none; border-bottom: 1px solid var(--rule); }
   .ll-figures { grid-template-columns: 1fr; }
   .ll-fig { border-right: none; border-bottom: 1px solid var(--rule); }
+  /* The service header never wrapped: period, meta and the status pill all
+     carry white-space:nowrap and nothing clips the overflow, so at this width
+     the meta text ran on past its box and painted straight through the pill
+     sitting next to it. Wrapping the row (and the left group inside it) lets
+     the pill drop to its own line instead of overlapping. */
+  .ll-service { flex-wrap: wrap; row-gap: 6px; }
+  .ll-service-left { flex-wrap: wrap; row-gap: 2px; }
 }
 /* Twelve equal columns is the run strip's whole idea (see .ll-run above), and
    that stays true even here — squeezing them to fit would make every month
@@ -1472,6 +1519,7 @@ BOT_CLOSED_CSS = f"""
   opacity: 0 !important; overflow: hidden !important;
   pointer-events: none !important;
 }}
+{_ROW}::before {{ content: none !important; display: none !important; }}
 """
 
 

@@ -1555,6 +1555,13 @@ if rail is not None:
         if not _was_open:
             st.markdown(f"<style>{theme.RAIL_OPEN_CSS}</style>",
                         unsafe_allow_html=True)
+        # Only shown (see theme.py) once the rail becomes a fixed right-edge
+        # overlay on a phone-width screen — on desktop the panel is a normal
+        # in-flow column and the toolbar's own "Close bot" toggle covers it.
+        if st.button("", icon=":material/close:", key="close_bot_mobile",
+                     help="Close"):
+            st.session_state.bot_open = False
+            st.rerun()
         html(cap("Finance bot", large=True))
 
         # ---- chat switcher ---------------------------------------------
