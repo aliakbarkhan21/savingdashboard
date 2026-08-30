@@ -1,0 +1,41 @@
+<!-- Installs the app manifest and iOS home-screen meta tags into the real
+     page <head>, not this iframe's own throwaway document.
+
+     st.markdown(unsafe_allow_html=True) cannot do this: React inserts that
+     markup via dangerouslySetInnerHTML, which never executes <script> or
+     <link> tags it's given — exactly why the click bridge next door also
+     needs a real iframe rather than a markdown block. A script running here
+     has a normal page load, so it can reach across to window.parent.document
+     and build the tags itself.
+
+     Guarded by an id check because Streamlit re-embeds this iframe on every
+     rerun (see bridge.html) — without the guard the same tags would pile up
+     in <head> once per script run. -->
+<script>
+(function () {
+  var head = window.parent.document.head;
+  if (head.querySelector('#ll-pwa-tags')) { return; }
+
+  var marker = document.createElement('meta');
+  marker.id = 'll-pwa-tags';
+  marker.name = 'll-pwa-tags';
+  head.appendChild(marker);
+
+  function tag(el, attrs) {
+    var e = window.parent.document.createElement(el);
+    for (var k in attrs) { e.setAttribute(k, attrs[k]); }
+    head.appendChild(e);
+  }
+
+  tag('link', {rel: 'manifest', href: '/app/static/manifest.json'});
+  tag('meta', {name: 'theme-color', content: '#07090C'});
+  tag('meta', {name: 'mobile-web-app-capable', content: 'yes'});
+  // iOS ignores the manifest for install/standalone-mode purposes and reads
+  // these Apple-specific tags instead.
+  tag('meta', {name: 'apple-mobile-web-app-capable', content: 'yes'});
+  tag('meta', {name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent'});
+  tag('meta', {name: 'apple-mobile-web-app-title', content: 'Loot Ledger'});
+  tag('link', {rel: 'apple-touch-icon', href: '/app/static/apple-touch-icon.png'});
+  tag('link', {rel: 'icon', type: 'image/png', sizes: '512x512', href: '/app/static/icon-512.png'});
+})();
+</script>

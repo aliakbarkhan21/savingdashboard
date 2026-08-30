@@ -41,6 +41,13 @@ import theme
 st.set_page_config(page_title="Loot Ledger", page_icon="▮",
                    layout="wide", initial_sidebar_state="expanded")
 
+# Installs the PWA manifest and iOS home-screen tags into the page <head> —
+# see pwa.html for why this needs a real iframe rather than unsafe_allow_html.
+# Lets "Add to Home Screen" launch as a standalone app icon instead of a
+# bookmarked browser tab.
+st.iframe(pathlib.Path(__file__).parent / "pwa.html", height=1)
+
+
 @st.cache_resource
 def _ensure_db() -> None:
     """init_db() is idempotent but does real I/O (schema checks, migrations) —
