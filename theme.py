@@ -1536,6 +1536,14 @@ RAIL_OPEN_CSS = f"""
 @media (prefers-reduced-motion: reduce) {{
   {_ROW} > [data-testid="stColumn"]:last-child {{ animation: none !important; }}
 }}
+/* On mobile the panel is a fixed overlay whose entire subtree — chat log,
+   composer, the click-bridge iframe — mounts for the first time on this same
+   run. The slide keyframe is compositor-only in isolation, but competing with
+   all of that mounting on a phone's single main thread is what read as lag;
+   dropping it here trades the drift-in for an instant, un-janky appearance. */
+@media (max-width: 680px) {{
+  {_ROW} > [data-testid="stColumn"]:last-child {{ animation: none !important; }}
+}}
 """
 
 
