@@ -2,6 +2,10 @@
 enableCORS = false
 enableXsrfProtection = false
 maxUploadSize = 500
+# Serves ./static/* at /app/static/* — needed for the PWA manifest and its
+# icons, which the browser fetches directly rather than through Streamlit's
+# own script-serving machinery.
+enableStaticServing = true
 
 [client]
 # Developer mode is what binds Streamlit's "C" = clear caches and "R" = rerun
