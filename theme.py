@@ -259,6 +259,12 @@ html, body, [data-testid="stAppViewContainer"] {
   padding: 0 var(--s5) var(--s6) !important;
   max-width: 1680px !important;
 }
+/* On a phone, --s5's 24px on each edge is real board width, not spare
+   margin — the same trim the board's own container queries above already
+   assume once it gets this narrow. */
+@media (max-width: 480px) {
+  .block-container { padding-left: var(--s3) !important; padding-right: var(--s3) !important; }
+}
 
 /* every number in this product stacks in a column */
 .stApp, .stApp input, .stApp button, .stApp table {
@@ -1399,6 +1405,28 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   .ll-col { border-right: none; border-bottom: 1px solid var(--rule); }
   .ll-figures { grid-template-columns: 1fr; }
   .ll-fig { border-right: none; border-bottom: 1px solid var(--rule); }
+}
+/* Twelve equal columns is the run strip's whole idea (see .ll-run above), and
+   that stays true even here — squeezing them to fit would make every month
+   unreadable at once. Scrolling instead keeps each column full-size; only the
+   current one has to be on screen without swiping. direction:rtl on the strip
+   (undone per-column so labels still read left-to-right) means the browser's
+   unscrolled resting position is already the right edge — i.e. the current
+   month — with no script needed to scroll there on load. */
+@container board (max-width: 620px) {
+  .ll-run {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    direction: rtl;
+  }
+  .ll-run-col {
+    direction: ltr;
+    flex: 0 0 52px;
+    min-width: 52px;
+    scroll-snap-align: end;
+  }
+  .ll-run-key { flex-wrap: wrap; row-gap: 4px; }
 }
 
 /* board controls must never wrap to two lines */
