@@ -480,14 +480,24 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
   overflow: hidden;
 }
 
-/* ---- service header: the strip that names the period and its state ---- */
+/* ---- service header: the strip that names the period and its state ----
+   flex-wrap is unconditional, not tied to a breakpoint: period+meta and the
+   status pill carry white-space:nowrap and nothing clips their overflow, so
+   whenever the row is too narrow for both — a board width no single
+   threshold can predict, since it depends on the period label's own length —
+   the pill needs to be free to drop to its own line. Wrapping is a no-op
+   whenever there is room, so this costs nothing at any width that fits. */
 .ll-service {
   display: flex; align-items: center; justify-content: space-between; gap: var(--s4);
+  flex-wrap: wrap; row-gap: 6px;
   padding: var(--s3) var(--s5);
   border-bottom: 1px solid var(--rule-2);
   background: var(--shade-strong);
 }
-.ll-service-left { display: flex; align-items: baseline; gap: var(--s3); min-width: 0; }
+.ll-service-left {
+  display: flex; align-items: baseline; gap: var(--s3); min-width: 0;
+  flex-wrap: wrap; row-gap: 2px;
+}
 .ll-service-period {
   font-family: var(--font-board); font-size: var(--t-h2); font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink); white-space: nowrap;
@@ -1445,13 +1455,6 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   .ll-col { border-right: none; border-bottom: 1px solid var(--rule); }
   .ll-figures { grid-template-columns: 1fr; }
   .ll-fig { border-right: none; border-bottom: 1px solid var(--rule); }
-  /* The service header never wrapped: period, meta and the status pill all
-     carry white-space:nowrap and nothing clips the overflow, so at this width
-     the meta text ran on past its box and painted straight through the pill
-     sitting next to it. Wrapping the row (and the left group inside it) lets
-     the pill drop to its own line instead of overlapping. */
-  .ll-service { flex-wrap: wrap; row-gap: 6px; }
-  .ll-service-left { flex-wrap: wrap; row-gap: 2px; }
 }
 /* Twelve equal columns is the run strip's whole idea (see .ll-run above), and
    that stays true even here — squeezing them to fit would make every month
