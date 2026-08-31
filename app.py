@@ -38,7 +38,13 @@ import importer
 import rates
 import theme
 
-st.set_page_config(page_title="Loot Ledger", page_icon="▮",
+# The tab mark is the LL monogram, not the ▮ glyph it used to be: a single
+# character rendered by whatever font the browser chose read as an anonymous
+# amber block at 16px and identified nothing. The letterforms are drawn as
+# rectangles rather than set in Barlow Condensed — at favicon size hinted
+# type turns to mush, and two L's are geometry anyway.
+st.set_page_config(page_title="Loot Ledger",
+                   page_icon=str(pathlib.Path(__file__).parent / "static" / "favicon-64.png"),
                    layout="wide", initial_sidebar_state="expanded")
 
 # Installs the PWA manifest and iOS home-screen tags into the page <head> —
