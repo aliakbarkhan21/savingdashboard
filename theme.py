@@ -1294,6 +1294,15 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 [data-baseweb="menu"] li:hover { background: var(--panel-3) !important; }
 [data-testid="stNumberInput"] button { background: var(--panel-3) !important; border-color: var(--rule-2) !important; }
 [data-testid="stForm"] { border: none !important; padding: 0 !important; }
+/* Streamlit's "Press Enter to submit form" hint. It is positioned absolutely
+   inside the field it belongs to, so it prints straight over the placeholder
+   rather than sitting under the input — and it appears on every text and
+   number field in the sidebar at once. Every form here already carries a
+   labelled submit button ("Add departure"), so the hint states something the
+   button says better, and removing it is the same call as toolbarMode
+   "viewer" in config.toml: this is a finished product being used, not a
+   scaffold being demonstrated. */
+[data-testid="InputInstructions"] { display: none !important; }
 [data-testid="stCheckbox"] p { font-size: var(--t-small) !important; color: var(--ink-2) !important; }
 [data-testid="stCaptionContainer"] p { font-size: var(--t-micro) !important; color: var(--ink-3) !important; }
 /* Plain st.markdown text (section headers like "**Budgets**", the records
