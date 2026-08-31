@@ -231,8 +231,64 @@ _LIGHT_VARS = """
   --flap-seam:   rgba(26,23,18,0.16);
 """
 
+# The type is served from the app's own /app/static/fonts, not fetched from
+# Google at runtime. An @import is a blocking request to a third party on
+# every load: when it is slow, blocked, or unreachable — a restrictive
+# network, a region that filters it, a cold origin — every rule below still
+# applies but the whole product silently falls back to Arial Narrow, which
+# reads as a cheap imitation of itself rather than as a broken stylesheet.
+# Self-hosting makes the signage type as reliable as the layout it sits in,
+# and the latin subset costs 152KB served from the same origin.
 _CSS_HEAD = """
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap');
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/app/static/fonts/barlow-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/app/static/fonts/barlow-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/app/static/fonts/barlow-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/app/static/fonts/barlow-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/app/static/fonts/barlow-condensed-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/app/static/fonts/barlow-condensed-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/app/static/fonts/barlow-condensed-700.woff2') format('woff2');
+}
 
 :root {"""
 
