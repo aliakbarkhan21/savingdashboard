@@ -1679,11 +1679,34 @@ div.st-key-close_rail button span[class*="material"] { font-size: 17px !importan
   max-height: 96px !important;
   overflow-y: auto !important;
 }
-/* A long filename must elide rather than set the chip's width. */
-[data-testid="stChatInput"] [data-testid="stFileChips"] > * {
+/* Two chips to a row, then wrap. The tray is 275px wide and each chip sizes
+   itself to a fixed 148px, so two of them plus the 8px column gap came to
+   304px and only one ever fit per line. Halving them fits the pair the tray
+   was always wide enough for.
+
+   The chips are grandchildren, not children: Streamlit wraps them in a
+   display:contents element, which is why an earlier rule aimed at
+   `stFileChips > *` did nothing at all — it was styling a box that generates
+   no box. The 4px is half the column gap. */
+[data-testid="stChatInput"] [data-testid="stFileChips"] > *,
+[data-testid="stChatInput"] [data-testid="stFileChips"] > * > * {
+  min-width: 0 !important;
+}
+[data-testid="stChatInput"] [data-testid="stFileChips"] > * > * {
+  flex: 0 0 calc(50% - 4px) !important;
+  max-width: calc(50% - 4px) !important;
+}
+/* The chip inside that slot carries its own intrinsic width (144px measured)
+   and simply overhung it. Clipping the slot hid the overflow but took the
+   chip's remove button with it, which is the one control on a chip that has
+   to stay reachable — so the chip is made to fit instead, and its contents
+   are allowed to shrink so the filename gives way rather than the ×. */
+[data-testid="stChatInput"] [data-testid="stFileChip"] {
+  width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
 }
+[data-testid="stChatInput"] [data-testid="stFileChip"] > * { min-width: 0 !important; }
 
 /* The caret starts where the field starts, and the field starts next to the
    attach button. Measured: a 299px row carrying 206px of controls was
@@ -1707,6 +1730,15 @@ div.st-key-close_rail button span[class*="material"] { font-size: 17px !importan
 }
 [data-testid="stChatInput"] [data-testid="stChatInputTextArea"] {
   width: 100% !important;
+}
+/* Send holds the right edge in both states. Once the typed text is long
+   enough the row wraps and the two buttons drop to a line of their own —
+   with the row now packed to flex-start they both sat at the left, which
+   space-between used to prevent as a side effect. An auto left margin does
+   it deliberately instead, and costs nothing on the single-line layout where
+   the field has already taken the slack. */
+[data-testid="stChatInput"] > div > div > div:has(> [data-testid="stChatInputSubmitButton"]) {
+  margin-left: auto !important;
 }
 
 /* ---- the composer stays on screen ----
