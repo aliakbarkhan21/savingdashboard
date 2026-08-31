@@ -1562,15 +1562,21 @@ if rail is not None:
         if not _was_open:
             st.markdown(f"<style>{theme.RAIL_OPEN_CSS}</style>",
                         unsafe_allow_html=True)
-        # Pinned to the panel's top-right corner at any width (see
-        # .st-key-close_rail in theme.py) — the one close control guaranteed
-        # to stay reachable, since the toolbar's own toggle can scroll out of
-        # view or sit behind the mobile overlay.
-        if st.button("", icon=":material/close:", key="close_rail",
-                     help="Close"):
-            st.session_state.bot_open = False
-            st.rerun()
-        html(cap("Finance bot", large=True))
+        # Heading and its close control share one row, aligned on their
+        # centres. An absolutely-positioned button was tried first and had to
+        # guess an offset that only held at one breakpoint — a real column
+        # pair lines them up at every width, and the heading's trailing rule
+        # simply stops before the button instead of running underneath it.
+        # The toolbar's own toggle can scroll out of view (and sits behind the
+        # overlay on mobile), so this is the close that is always reachable.
+        head_l, head_r = st.columns([6, 1], vertical_alignment="center")
+        with head_l:
+            html(cap("Finance bot", large=True))
+        with head_r:
+            if st.button("", icon=":material/close:", key="close_rail",
+                         help="Close"):
+                st.session_state.bot_open = False
+                st.rerun()
 
         # ---- chat switcher ---------------------------------------------
         # A selectbox rather than the heading itself: Streamlit cannot turn
