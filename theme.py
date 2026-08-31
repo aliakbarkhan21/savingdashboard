@@ -957,10 +957,6 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
               width 300ms cubic-bezier(0.22, 0.61, 0.36, 1),
               opacity 220ms ease;
   will-change: max-width;
-  /* An anchor for the rail's own close button (see .st-key-close_rail below)
-     to position against — a no-op on the stage column, which never has an
-     absolutely-positioned child. */
-  position: relative;
 }
 /* On a phone there is no room for the sidebar (left) AND a side-by-side
    board+rail split, so below this width Streamlit's own column stacking
@@ -996,22 +992,11 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
     z-index: 999; pointer-events: none;
   }
 }
-/* The rail's own close button — pinned to the panel's top-right corner at
-   any width, next to the "Finance bot" heading. The toolbar's "Close bot"
-   toggle still exists for desktop, but it can scroll out of view once
-   you're deep in a chat, and on mobile it's off-screen behind the overlay
-   entirely, so this is the one close control guaranteed to be reachable.
-   display:none on the class alone would not be enough to remove it when
-   unwanted — as with .ll-stage-marker below, Streamlit still gives the
-   *outer* stElementContainer a slot in the rail's flex gap even once its
-   child is hidden — but that's moot now that this is shown unconditionally. */
-.st-key-close_rail {
-  position: absolute !important; top: var(--s3) !important; right: var(--s3) !important;
-  width: 32px !important; z-index: 2;
-}
-[data-testid="stElementContainer"]:has(.st-key-close_rail) {
-  display: block !important; height: auto !important; margin: 0 !important;
-}
+/* The close button's column is sized for the control, not the other way
+   round — without this it keeps the column's full width and the icon drifts
+   left of the panel edge. Its skin is declared at the end of this sheet, for
+   the same source-order reason as .st-key-clear_chat. */
+.st-key-close_rail { display: flex !important; justify-content: flex-end !important; }
 .ll-stage-marker { display: none; }
 /* The marker is hidden, but Streamlit still gives its element container a
    slot in the column's flex gap — 16px of nothing above the board. Removed
@@ -1515,6 +1500,32 @@ div.st-key-clear_chat button:hover {
   color: #FFFFFF !important;
 }
 div.st-key-clear_chat button * { color: #FFFFFF !important; }
+
+/* The rail's close control. Chrome, not content — the same treatment the
+   sidebar's collapse arrow gets: no fill or border at rest so it reads as a
+   dismiss affordance rather than an action, full contrast on hover. Declared
+   here, last and with a heavier selector than the generic button skin, for
+   exactly the reason given above clear_chat: that skin is !important too and
+   ties on specificity, so source order would otherwise hand it the win — and
+   it is what was keeping this button at a chunky 36px filled panel box. */
+div.st-key-close_rail button {
+  width: 26px !important; height: 26px !important;
+  min-height: 26px !important; padding: 0 !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: var(--ink-3) !important;
+  border-radius: var(--radius) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+div.st-key-close_rail button:hover {
+  background: var(--panel-2) !important;
+  border-color: var(--rule-2) !important;
+  color: var(--amber) !important;
+}
+div.st-key-close_rail button * { color: inherit !important; }
+div.st-key-close_rail button span[class*="material"] { font-size: 17px !important; }
 """
 
 
