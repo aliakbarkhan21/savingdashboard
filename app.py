@@ -1717,8 +1717,13 @@ if rail is not None:
         # simply as tall as its contents and the input is the first thing in
         # reach. A real conversation still gets the scroll box, or it would
         # push the whole page down as it grew.
-        log = (st.container() if turns == 0
-               else st.container(height=min(260 + turns * 80, 400)))
+        # Keyed so the stylesheet can clamp it against the viewport: a pixel
+        # height is all st.container takes, and a fixed 400 was taller than
+        # the room left on a phone once the heading, switcher, prompts and
+        # composer had taken theirs — the composer ended up below the fold.
+        # CSS finishes the job in vh; these numbers are just the ceiling.
+        log = (st.container(key="bot_log") if turns == 0
+               else st.container(height=min(200 + turns * 60, 320), key="bot_log"))
         with log:
             if not st.session_state.messages:
                 # No example line here. It cost four lines of height on the

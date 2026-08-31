@@ -1053,6 +1053,28 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
    left of the panel edge. Its skin is declared at the end of this sheet, for
    the same source-order reason as .st-key-clear_chat. */
 .st-key-close_rail { display: flex !important; justify-content: flex-end !important; }
+/* Heading and close button are a pair, not a stack. Streamlit's own column
+   stacking breaks them onto two rows once the rail is phone-width, which put
+   the × on its own line under the title — the exact layout this row exists
+   to avoid. Held on one line, with the button column sized to the control.
+
+   The full child chain is deliberate. A plain :has(.st-key-close_rail) also
+   matches the outer stage/rail row, because that row contains this one — it
+   was measured matching two blocks, and the column rules below would then
+   have resized the rail column itself. Spelling out
+   > stColumn > stVerticalBlock > the keyed element pins it to this row
+   alone. Same reasoning for the switcher row and the log wrapper below. */
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > .st-key-close_rail) {
+  flex-wrap: nowrap !important;
+  gap: var(--s2) !important;
+}
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > .st-key-close_rail) > [data-testid="stColumn"] {
+  min-width: 0 !important;
+}
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > .st-key-close_rail) > [data-testid="stColumn"]:last-child {
+  flex: 0 0 auto !important;
+  width: auto !important;
+}
 .ll-stage-marker { display: none; }
 /* The marker is hidden, but Streamlit still gives its element container a
    slot in the column's flex gap — 16px of nothing above the board. Removed
@@ -1582,6 +1604,126 @@ div.st-key-close_rail button:hover {
 }
 div.st-key-close_rail button * { color: inherit !important; }
 div.st-key-close_rail button span[class*="material"] { font-size: 17px !important; }
+
+/* ---- attachments must stay inside the composer ----
+   Streamlit already sets flex-wrap:wrap on the chip tray, but wrapping never
+   engaged: a flex item's default min-width is auto, so the tray was free to
+   size itself to its contents (461px measured) inside a 275px composer and
+   simply overhang it. Three pasted images were enough to see it. Letting the
+   tray and its two flex ancestors shrink below their content width is what
+   makes the existing wrap rule do its job. */
+[data-testid="stChatInput"] > div,
+[data-testid="stChatInput"] > div > div {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+[data-testid="stChatInput"] [data-testid="stFileChips"] {
+  flex-wrap: wrap !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  row-gap: 4px !important;
+  /* Wrapping alone only moves the problem from sideways to downwards: enough
+     attachments and the tray pushes the composer off screen again. Capped and
+     scrolled, the composer costs the same height whether it is carrying one
+     image or ten. */
+  max-height: 96px !important;
+  overflow-y: auto !important;
+}
+/* A long filename must elide rather than set the chip's width. */
+[data-testid="stChatInput"] [data-testid="stFileChips"] > * {
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* ---- the composer stays on screen ----
+   The log is a scroll box, so anything it cannot show is reachable by
+   scrolling inside it; the composer is not, and being pushed past the fold
+   made the panel look broken once a conversation started. Clamped against
+   the viewport rather than a fixed pixel height, because the room left over
+   is a function of screen height, which no constant can predict. */
+div.st-key-bot_log,
+div.st-key-bot_log > div,
+div.st-key-bot_log [data-testid="stVerticalBlock"] {
+  max-height: clamp(120px, 30vh, 300px) !important;
+}
+/* st.container(height=) puts the pixel height on a wrapper *around* the
+   keyed element, so clamping the keyed element alone left the wrapper at its
+   full height and the saving never reached the layout. Direct child only —
+   an unscoped :has() also matches the rail's outer wrapper. */
+[data-testid="stLayoutWrapper"]:has(> .st-key-bot_log) {
+  max-height: clamp(120px, 30vh, 300px) !important;
+}
+
+/* The chat switcher is three small controls that Streamlit's own column
+   stacking breaks onto three rows once the rail is phone-width — 150px of
+   height for one selectbox and two icon buttons. They fit side by side at
+   any width this panel actually reaches, provided the columns are allowed
+   to shrink below their content. */
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > .st-key-chat_new) {
+  flex-wrap: nowrap !important;
+  gap: var(--s2) !important;
+}
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > .st-key-chat_new) > [data-testid="stColumn"] {
+  min-width: 0 !important;
+  flex: 1 1 0 !important;
+}
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > .st-key-chat_new) > [data-testid="stColumn"]:nth-child(2),
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > .st-key-chat_new) > [data-testid="stColumn"]:nth-child(3) {
+  flex: 0 0 auto !important;
+  width: auto !important;
+}
+
+/* The prompts are a menu, not the main event. Trimmed so the four buttons
+   under the log cost roughly one button's worth of height less between them
+   — which is what buys the composer its place on a short screen. */
+div.st-key-starter_0 button,
+div.st-key-starter_1 button,
+div.st-key-explain_period button,
+div.st-key-clear_chat button {
+  min-height: 30px !important;
+  height: auto !important;
+  padding: 5px 10px !important;
+  font-size: var(--t-micro) !important;
+  line-height: 1.3 !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* ---- Streamlit's own dialogs, including the connection error ----
+   Not one of ours and never themed: the card paints itself near-white from
+   Streamlit's own palette while the text inside inherits config.toml's
+   static textColor (#E9EDF2), so "Connection error" and its body came out
+   near-white on cream — legible only if you already knew what it said. Same
+   class of bug as the expander header and the file-uploader button noted
+   above: one Streamlit surface filling from two palettes at once.
+
+   Targeted through BaseWeb's own modal attribute rather than an emotion
+   class hash, which changes on every Streamlit build. The popover and menu
+   rules further up deliberately are not touched — this is scoped to modals
+   so those keep their own panel-2 surface. */
+[data-baseweb="modal"] [role="dialog"],
+[data-testid="stDialog"] [role="dialog"] {
+  background: var(--panel) !important;
+  border: 1px solid var(--rule-2) !important;
+  border-radius: var(--radius) !important;
+  color: var(--ink) !important;
+}
+[data-baseweb="modal"] [role="dialog"] *,
+[data-testid="stDialog"] [role="dialog"] * {
+  color: var(--ink) !important;
+}
+/* The dialog's code block is the one thing in it that should read as a
+   terminal line, so it keeps the void ground and amber ink used elsewhere. */
+[data-baseweb="modal"] [role="dialog"] code,
+[data-baseweb="modal"] [role="dialog"] pre,
+[data-testid="stDialog"] [role="dialog"] code,
+[data-testid="stDialog"] [role="dialog"] pre {
+  background: var(--void) !important;
+  color: var(--amber) !important;
+  border: 1px solid var(--rule) !important;
+  border-radius: var(--radius) !important;
+}
+[data-baseweb="modal"] [role="dialog"] code *,
+[data-testid="stDialog"] [role="dialog"] code * { color: var(--amber) !important; }
 """
 
 
