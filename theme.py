@@ -1034,10 +1034,21 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
     background: var(--panel) !important;
     border-left: 1px solid var(--rule-2) !important;
     box-shadow: -12px 0 32px var(--board-shadow) !important;
-    padding: var(--s4) var(--s4) var(--s3) !important;
+    padding: var(--s4) var(--s4) var(--s5) !important;
     overflow-y: auto !important;
     transition: transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1) !important;
   }
+  /* The prompts and composer sit at the foot of the panel rather than
+     halfway up it: the rail is a fixed-height drawer here, so whatever the
+     log does not use was 218px of dead panel measured under the composer.
+     An auto top margin on the first prompt carries everything after it down
+     with it, and the panel's own bottom padding keeps it off the edge.
+
+     Deliberately inside this breakpoint. The desktop rail is a normal
+     in-flow column that stretches to the board's height — 1444px against a
+     900px viewport — so the same rule there would push the composer some
+     800px below the fold rather than to the bottom of anything visible. */
+  .st-key-starter_0 { margin-top: auto !important; }
   /* A dimmed scrim so the board reads as backgrounded behind the panel — not
      interactive (no tap-to-close) since forwarding that tap into a Streamlit
      rerun needs the same click-bridge trickery as the board rows use, which
@@ -1633,6 +1644,30 @@ div.st-key-close_rail button span[class*="material"] { font-size: 17px !importan
 [data-testid="stChatInput"] [data-testid="stFileChips"] > * {
   max-width: 100% !important;
   min-width: 0 !important;
+}
+
+/* The caret starts where the field starts, and the field starts next to the
+   attach button. Measured: a 299px row carrying 206px of controls was
+   dealing its 93px of slack out *between* the three of them — ~46px either
+   side of the text field — so typing began a third of the way across the
+   composer with dead space to its left. Giving the field the slack instead
+   puts the caret back beside the + and lets it grow with the panel.
+
+   Two things had to change together. The row is justify-content:
+   space-between, which is what deals the slack outward in the first place;
+   and the field's own wrapper is pinned to flex:0 0 auto by the composer
+   height rule further up, whose selector outscores a plain descendant one —
+   so the :first-child chain is repeated here, plus :has(), to land above it
+   rather than merely after it. */
+[data-testid="stChatInput"] > div > div:has(> div > [data-testid="stChatInputTextArea"]) {
+  justify-content: flex-start !important;
+}
+[data-testid="stChatInput"] > div > div > div:first-child:has(> [data-testid="stChatInputTextArea"]) {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+[data-testid="stChatInput"] [data-testid="stChatInputTextArea"] {
+  width: 100% !important;
 }
 
 /* ---- the composer stays on screen ----
