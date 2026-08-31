@@ -993,11 +993,21 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   }
   .st-key-close_bot_mobile { display: block !important; position: absolute !important;
     top: var(--s3) !important; right: var(--s3) !important; width: 32px !important; z-index: 2; }
+  [data-testid="stElementContainer"]:has(.st-key-close_bot_mobile) {
+    display: block !important; height: auto !important; margin: 0 !important;
+  }
 }
 /* Hidden outside the breakpoint above: the toolbar's own "Close bot" button
    already covers desktop, where the rail is a normal in-flow column and this
-   corner control would be redundant clutter. */
+   corner control would be redundant clutter. display:none on the class alone
+   is not enough — as with .ll-stage-marker below, Streamlit still gives the
+   *outer* stElementContainer a slot in the rail's flex gap even once its
+   child is hidden, leaving a blank gap-sized strip above "Finance bot". The
+   container itself has to be the thing that's hidden. */
 .st-key-close_bot_mobile { display: none; }
+[data-testid="stElementContainer"]:has(.st-key-close_bot_mobile) {
+  display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important;
+}
 .ll-stage-marker { display: none; }
 /* The marker is hidden, but Streamlit still gives its element container a
    slot in the column's flex gap — 16px of nothing above the board. Removed
