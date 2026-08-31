@@ -1044,10 +1044,8 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
      An auto top margin on the first prompt carries everything after it down
      with it, and the panel's own bottom padding keeps it off the edge.
 
-     Deliberately inside this breakpoint. The desktop rail is a normal
-     in-flow column that stretches to the board's height — 1444px against a
-     900px viewport — so the same rule there would push the composer some
-     800px below the fold rather than to the bottom of anything visible. */
+     The desktop half of this is below: the same auto margin, but only once
+     that rail has been given a bounded height to distribute. */
   .st-key-starter_0 { margin-top: auto !important; }
   /* A dimmed scrim so the board reads as backgrounded behind the panel — not
      interactive (no tap-to-close) since forwarding that tap into a Streamlit
@@ -1590,6 +1588,38 @@ div.st-key-clear_chat button:hover {
 }
 div.st-key-clear_chat button * { color: #FFFFFF !important; }
 
+/* ---- the desktop rail is a panel, not a column ----
+   Left to itself it is a flex item stretched to the tallest thing in the row,
+   which is the board: 1444px of column against a 900px viewport, with the
+   composer ending at 751px and roughly 700px of empty panel beneath it. That
+   dead run is the gap under the composer, and no auto margin can close it
+   while the box being distributed is itself taller than the screen.
+
+   Bounding it to the viewport turns it into what it already reads as — a
+   panel beside the board — and gives the auto margin a box worth
+   distributing, so the composer sits at its foot exactly as it does in the
+   mobile drawer. Sticky rather than fixed so it holds position while the
+   board scrolls without leaving the row's layout, and align-self stops the
+   flex row stretching it back to the board's full height. */
+@media (min-width: 681px) {
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .ll-stage-marker)
+    > [data-testid="stColumn"]:last-child {
+    position: sticky !important;
+    top: var(--s4) !important;
+    align-self: flex-start !important;
+    height: calc(100vh - var(--s7)) !important;
+    overflow-y: auto !important;
+    padding-bottom: var(--s5) !important;
+  }
+  /* The stack has to fill the panel before anything in it can be pushed to
+     the foot of it. */
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .ll-stage-marker)
+    > [data-testid="stColumn"]:last-child > [data-testid="stVerticalBlock"] {
+    min-height: 100% !important;
+  }
+  .st-key-starter_0 { margin-top: auto !important; }
+}
+
 /* The rail's close control. Chrome, not content — the same treatment the
    sidebar's collapse arrow gets: no fill or border at rest so it reads as a
    dismiss affordance rather than an action, full contrast on hover. Declared
@@ -1680,6 +1710,9 @@ div.st-key-bot_log,
 div.st-key-bot_log > div,
 div.st-key-bot_log [data-testid="stVerticalBlock"] {
   max-height: clamp(120px, 30vh, 300px) !important;
+  /* Paired with the clamp, never without it: a max-height that nothing
+     scrolls just prints the overflow over whatever comes next. */
+  overflow-y: auto !important;
 }
 /* st.container(height=) puts the pixel height on a wrapper *around* the
    keyed element, so clamping the keyed element alone left the wrapper at its

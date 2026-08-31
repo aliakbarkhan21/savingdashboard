@@ -1722,7 +1722,13 @@ if rail is not None:
         # the room left on a phone once the heading, switcher, prompts and
         # composer had taken theirs — the composer ended up below the fold.
         # CSS finishes the job in vh; these numbers are just the ceiling.
-        log = (st.container(key="bot_log") if turns == 0
+        # Two different keys on purpose. Only the conversation state is
+        # clamped by the stylesheet; the opening state keeps the unbounded
+        # height the comment above argues for, and clamping it as well made
+        # the legend overflow its box and print underneath the prompt
+        # buttons, since a container with no height= gets no scrollbar to
+        # contain what the clamp cut off.
+        log = (st.container(key="bot_log_open") if turns == 0
                else st.container(height=min(200 + turns * 60, 320), key="bot_log"))
         with log:
             if not st.session_state.messages:
