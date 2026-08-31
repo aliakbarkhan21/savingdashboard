@@ -1706,9 +1706,13 @@ div.st-key-close_rail button span[class*="material"] { font-size: 17px !importan
    made the panel look broken once a conversation started. Clamped against
    the viewport rather than a fixed pixel height, because the room left over
    is a function of screen height, which no constant can predict. */
-div.st-key-bot_log,
-div.st-key-bot_log > div,
-div.st-key-bot_log [data-testid="stVerticalBlock"] {
+/* The keyed element IS the log's own stVerticalBlock, so it is the only
+   thing that may carry this. An earlier version also listed
+   `.st-key-bot_log [data-testid="stVerticalBlock"]`, which matched every
+   block *inside* the log — every individual chat message — and handed each
+   one its own clamp and scrollbar: a stack of nested scroll tracks with the
+   replies clipped and printing over each other. */
+div.st-key-bot_log {
   max-height: clamp(120px, 30vh, 300px) !important;
   /* Paired with the clamp, never without it: a max-height that nothing
      scrolls just prints the overflow over whatever comes next. */
