@@ -58,6 +58,7 @@ FALLBACK_MODELS = [
     "gemini-3.1-flash-lite",
     "gemini-3.7-flash",
     "gemini-3.6-flash",
+    "gemini-3.1-pro",
 ]
 
 # Whichever model actually answered last, so the UI can say when it has moved
