@@ -10,6 +10,11 @@ of a receipt.
 
 Built by [Muhammad Ali Akbar](https://www.linkedin.com/in/muhammad-ali-akbar-khan-7b37b8197).
 
+![The Loot Ledger board: four split-flap figures over arrivals and departures columns](docs/board.png)
+
+<sub>Shown with generated sample data — the banner says so on screen. No real
+records appear in any screenshot.</sub>
+
 ---
 
 ## What it does
@@ -47,6 +52,8 @@ burn.
 **Recurring entries and debt ageing.** Rent, subscriptions and salary are logged
 from a template once their day arrives. Unsettled debts past 30 days are called
 out with the number of days they have been outstanding.
+
+![The finance bot open beside the board](docs/finance-bot.png)
 
 **The Finance Bot.** Streams its replies and holds live tool access:
 `log_expense`, `log_transport`, `log_income`, `log_lent`, `log_borrowed`,
@@ -97,8 +104,13 @@ every install. On Windows, **`Start Loot Ledger.vbs`** does the same thing with
 no console window and opens the browser for you; **`Stop Loot Ledger.bat`**
 shuts the server down.
 
-Opens at `http://localhost:8501/lootledger` (the base path is set in
-`.streamlit/config.toml`). Data lives in `tracker.db`, created on first run.
+Opens at `http://localhost:8501`. Data lives in `tracker.db`, created on first
+run.
+
+There is deliberately **no `server.baseUrlPath`**. It used to be set, and on a
+host that does its own routing the app is served at a subdomain root instead —
+so every asset request resolved one directory too deep, the frontend never
+mounted, and the page showed a bare error with no traceback under it.
 
 Set `LOOT_LEDGER_DB` to point at a different SQLite file — useful for running a
 scratch instance beside your real one.
@@ -134,8 +146,11 @@ scratch instance beside your real one.
   drifts over enough fractional arithmetic, an integer one cannot. Conversion
   happens at the storage boundary, so the rest of the app works in rupees.
 - Dates are entered and shown as DD/MM/YYYY, stored as ISO.
-- Designed for desktop. The board reflows to a 2x2 figure grid when the bot
-  panel is open, via container queries.
+- Wide screen first, phone supported. The board reflows on its own width via
+  container queries — to a 2x2 figure grid when the bot panel is open, and to a
+  single column on a phone. Below 680px the bot opens as a right-edge drawer
+  over the board rather than stacking beneath it, and the app installs to a home
+  screen as a standalone web app.
 - Transport is both its own ledger and a spending category; the two are summed
   into one "Transportation" platform for charts. Whether to merge them properly
   is still open.
