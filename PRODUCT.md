@@ -43,22 +43,43 @@ Two things a generic expense tracker does not do:
 
 ## Operating Context
 
-- Desktop/laptop only. Confirmed: the app is not used on a phone, and wide-screen is the
-  sole design target.
-- Run locally via `streamlit run app.py`, served under the `lootledger` base path.
+- **Wide screen is the primary design target; the phone is a supported second one.**
+  Superseded the previous "desktop only, never used on a phone" position — the app is now
+  used on a phone regularly. The board keeps its one-strip thesis and reflows through
+  container queries rather than a separate mobile layout; the Finance Bot opens as a
+  right-edge overlay drawer under 680px instead of stacking beneath the board.
+- Installable to a phone home screen: a web app manifest and iOS meta tags are injected
+  into `<head>` from `pwa.html`, so "Add to Home Screen" launches it standalone.
+- Runs two ways: locally via `streamlit run app.py`, and deployed on Streamlit Community
+  Cloud from the `main` branch of `aliakbarkhan21/savingdashboard`. **No base path** —
+  `server.baseUrlPath` was removed because Community Cloud does its own routing and the
+  mismatch broke frontend asset loading outright.
 - Currency is Pakistani Rupees, displayed as `Rs.` with thousands separators and two
   decimals. Dates are entered and displayed as DD/MM/YYYY; stored as ISO `YYYY-MM-DD`.
-- Data is a local SQLite file (`tracker.db`). No sync, no backup, no export beyond the
-  per-table CSV downloads.
+- Data is a local SQLite file (`tracker.db`), which is gitignored. **Local and deployed
+  therefore hold two entirely separate databases, and neither syncs to the other.** The
+  Cloud copy is also ephemeral: a reboot re-clones the repo, and since the file is not in
+  it, the deployed ledger starts empty again. Treat the local file as the real one.
+- Typefaces are self-hosted from `static/fonts` (Barlow and Barlow Condensed, latin
+  subset). Previously fetched from Google Fonts at runtime; when that request was slow or
+  filtered the whole product silently fell back to Arial Narrow and looked like a cheap
+  imitation of itself.
 - The Gemini API key lives in `.streamlit/secrets.toml` as `GEMINI_API_KEY`. The bot
   degrades to an explicit warning when the key is absent.
 
 ## Capabilities and Constraints
 
-**Stack (fixed, confirmed):** Streamlit + SQLite + Plotly + `google-genai`. Confirmed
-decision to stay in Streamlit rather than move to a custom frontend, accepting its design
-ceiling. Custom CSS injection and same-origin `st.iframe` scripts are established,
-working techniques in this codebase and remain available.
+**Stack (fixed, confirmed):** Streamlit + SQLite + `google-genai`, with pandas, Pillow and
+openpyxl for the import path. Confirmed decision to stay in Streamlit rather than move to
+a custom frontend, accepting its design ceiling. Custom CSS injection and same-origin
+`st.iframe` scripts are established, working techniques in this codebase and remain
+available.
+
+**No charting library.** Plotly was listed here but is imported nowhere; every graphic is
+hand-drawn — the category donut is inline SVG generated in `theme.donut_svg`, and the
+month run strip, budget meters and rail bars are CSS. This is deliberate: a chart library
+brings its own visual defaults, and the point of the board is that nothing on it looks
+like a default.
 
 **Five ledgers:** `expenses` (date, description, category, amount), `transport`
 (date, amount), `income` (date, source, amount), `lent` (date, person, amount,
@@ -99,10 +120,12 @@ the Transportation category. Not resolved; do not silently merge them.
 - A live, working Gemini API key and confirmed access to `gemini-3.6-flash`, verified
   this session including end-to-end tool-calling.
 - `finance_data.csv` (83 bytes) — a near-empty stub, not real historical data.
-- **`tracker.db` is empty. Every table has zero rows.** There is no real transaction
-  history, no screenshots, no user testimonials, and no usage metrics. Nothing in this
-  project may present invented balances as Ali's real finances; any sample figures must
-  be visibly labeled as demo data.
+- **`tracker.db` now holds demo data, not real history** — 32 expenses, 3 income rows and
+  1 transport row, loaded through the in-app "Load sample data" control. It was empty when
+  this document was written. There is still no real transaction history, no user
+  testimonials and no usage metrics. The rule is unchanged and now load-bearing: nothing
+  in this project may present invented balances as Ali's real finances, and any sample
+  figures must stay visibly labeled as demo data.
 
 ## Product Principles
 
