@@ -957,6 +957,10 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
               width 300ms cubic-bezier(0.22, 0.61, 0.36, 1),
               opacity 220ms ease;
   will-change: max-width;
+  /* An anchor for the rail's own close button (see .st-key-close_rail below)
+     to position against — a no-op on the stage column, which never has an
+     absolutely-positioned child. */
+  position: relative;
 }
 /* On a phone there is no room for the sidebar (left) AND a side-by-side
    board+rail split, so below this width Streamlit's own column stacking
@@ -991,22 +995,22 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
     background: rgba(var(--void-rgb), 0.55);
     z-index: 999; pointer-events: none;
   }
-  .st-key-close_bot_mobile { display: block !important; position: absolute !important;
-    top: var(--s3) !important; right: var(--s3) !important; width: 32px !important; z-index: 2; }
-  [data-testid="stElementContainer"]:has(.st-key-close_bot_mobile) {
-    display: block !important; height: auto !important; margin: 0 !important;
-  }
 }
-/* Hidden outside the breakpoint above: the toolbar's own "Close bot" button
-   already covers desktop, where the rail is a normal in-flow column and this
-   corner control would be redundant clutter. display:none on the class alone
-   is not enough — as with .ll-stage-marker below, Streamlit still gives the
+/* The rail's own close button — pinned to the panel's top-right corner at
+   any width, next to the "Finance bot" heading. The toolbar's "Close bot"
+   toggle still exists for desktop, but it can scroll out of view once
+   you're deep in a chat, and on mobile it's off-screen behind the overlay
+   entirely, so this is the one close control guaranteed to be reachable.
+   display:none on the class alone would not be enough to remove it when
+   unwanted — as with .ll-stage-marker below, Streamlit still gives the
    *outer* stElementContainer a slot in the rail's flex gap even once its
-   child is hidden, leaving a blank gap-sized strip above "Finance bot". The
-   container itself has to be the thing that's hidden. */
-.st-key-close_bot_mobile { display: none; }
-[data-testid="stElementContainer"]:has(.st-key-close_bot_mobile) {
-  display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important;
+   child is hidden — but that's moot now that this is shown unconditionally. */
+.st-key-close_rail {
+  position: absolute !important; top: var(--s3) !important; right: var(--s3) !important;
+  width: 32px !important; z-index: 2;
+}
+[data-testid="stElementContainer"]:has(.st-key-close_rail) {
+  display: block !important; height: auto !important; margin: 0 !important;
 }
 .ll-stage-marker { display: none; }
 /* The marker is hidden, but Streamlit still gives its element container a
