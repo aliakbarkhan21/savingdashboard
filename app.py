@@ -29,6 +29,7 @@ from html import escape as esc
 import pandas as pd
 import streamlit as st
 
+import access
 import bot
 import db
 import demo
@@ -59,9 +60,19 @@ def _ensure_db() -> None:
     """init_db() is idempotent but does real I/O (schema checks, migrations) —
     cache_resource runs it once per process instead of on every rerun."""
     db.init_db()
+    # A deployed sample instance fills itself so a stranger never lands on an
+    # empty board. No-op on the real ledger; see access.py for why the
+    # deployment gets generated records instead of the real ones.
+    access.seed_demo_if_empty()
 
 
 _ensure_db()
+
+# Before a single figure is painted. On a laptop with no configuration this
+# returns immediately and nothing changes; once the app is reachable from
+# outside — a tunnel, so the phone can use it — it is what stands in front of
+# real financial records.
+access.gate()
 
 # Theme choice is read from the URL query string before anything renders, so a
 # full browser reload (not just a Streamlit rerun) keeps the mode the user
@@ -2363,6 +2374,8 @@ def settings_dialog():
                 if st.button("Cancel", width="stretch", key="restore_cancel"):
                     st.session_state.restore_armed = False
                     st.rerun()
+
+    access.sign_out_control()
 
     st.divider()
     st.markdown("**Reset**")
