@@ -31,4 +31,4 @@ sh.Run "cmd /c python -m streamlit run app.py > lootledger.log 2>&1", 0, False
 
 ' Give the server a moment to bind the port before the browser asks for it.
 WScript.Sleep 8000
-sh.Run "http://localhost:8501/lootledger", 1, False
+sh.Run "http://localhost:8501", 1, False
