@@ -35,6 +35,29 @@ LEDGERS = ("expenses", "transport", "income", "lent", "borrowed")
 
 _UNIT_FLAG = "amount_unit"
 
+# ---------- how a debt was actually incurred ----------
+# A debt has two separate facts in it: the obligation, and whether cash moved
+# when it started. They are usually the same event, but not always.
+#
+#   CASH     someone handed over money. Borrowing puts cash in your pocket now;
+#            lending takes it out now. Both reverse on settlement.
+#   COVERED  nobody handed over money. A friend paid for your ticket, or you
+#            paid for theirs on a card already logged as an expense. The
+#            obligation is real, but your cash on hand did not move — and it
+#            must not, or the ledger invents money that was never in your hand.
+#            Only settling it moves cash.
+#
+# Every row written before this column existed was a real cash transfer, so
+# CASH is the default and the migration backfills it.
+CASH = "cash"
+COVERED = "covered"
+KINDS = (CASH, COVERED)
+
+
+def clean_kind(value):
+    """Anything unrecognised falls back to CASH — the historic behaviour."""
+    return value if value in KINDS else CASH
+
 
 def _to_paisa(amount) -> int:
     return int(round(float(amount) * 100))
@@ -91,7 +114,8 @@ def init_db():
             person TEXT NOT NULL,
             amount REAL NOT NULL,
             paid_back INTEGER NOT NULL DEFAULT 0,
-            settled_date TEXT
+            settled_date TEXT,
+            kind TEXT NOT NULL DEFAULT 'cash'
         )
     """)
     cur.execute("""
@@ -101,9 +125,19 @@ def init_db():
             lender TEXT NOT NULL,
             amount REAL NOT NULL,
             paid_back INTEGER NOT NULL DEFAULT 0,
-            settled_date TEXT
+            settled_date TEXT,
+            kind TEXT NOT NULL DEFAULT 'cash'
         )
     """)
+
+    # --- migrate files created before `kind` existed ---
+    # NOT NULL DEFAULT on ADD COLUMN backfills every existing row with 'cash',
+    # which is the correct reading of them: before this column there was no way
+    # to record a debt where cash had not moved, so every one of them had.
+    for table in ("lent", "borrowed"):
+        if "kind" not in _columns(cur, table):
+            cur.execute(
+                f"ALTER TABLE {table} ADD COLUMN kind TEXT NOT NULL DEFAULT '{CASH}'")
 
     # --- migrate files created before settled_date existed ---
     for table in ("lent", "borrowed"):
@@ -202,11 +236,11 @@ def add_income(entry_date, source, amount):
     return row_id
 
 
-def add_lent(entry_date, person, amount):
+def add_lent(entry_date, person, amount, kind=CASH):
     conn = get_connection()
     cur = conn.execute(
-        "INSERT INTO lent (date, person, amount) VALUES (?,?,?)",
-        (entry_date, person, _to_paisa(amount)),
+        "INSERT INTO lent (date, person, amount, kind) VALUES (?,?,?,?)",
+        (entry_date, person, _to_paisa(amount), clean_kind(kind)),
     )
     row_id = cur.lastrowid
     conn.commit()
@@ -214,11 +248,11 @@ def add_lent(entry_date, person, amount):
     return row_id
 
 
-def add_borrowed(entry_date, lender, amount):
+def add_borrowed(entry_date, lender, amount, kind=CASH):
     conn = get_connection()
     cur = conn.execute(
-        "INSERT INTO borrowed (date, lender, amount) VALUES (?,?,?)",
-        (entry_date, lender, _to_paisa(amount)),
+        "INSERT INTO borrowed (date, lender, amount, kind) VALUES (?,?,?,?)",
+        (entry_date, lender, _to_paisa(amount), clean_kind(kind)),
     )
     row_id = cur.lastrowid
     conn.commit()
@@ -272,8 +306,8 @@ EDITABLE = {
     "expenses":  ("date", "description", "category", "amount"),
     "transport": ("date", "amount"),
     "income":    ("date", "source", "amount"),
-    "lent":      ("date", "person", "amount", "paid_back", "settled_date"),
-    "borrowed":  ("date", "lender", "amount", "paid_back", "settled_date"),
+    "lent":      ("date", "person", "amount", "paid_back", "settled_date", "kind"),
+    "borrowed":  ("date", "lender", "amount", "paid_back", "settled_date", "kind"),
 }
 
 
@@ -326,8 +360,106 @@ def delete_row(table, row_id):
     conn.close()
 
 
+def safety_backup(tag="wipe"):
+    """Copy the whole database file before something irreversible touches it.
+
+    This exists because a wipe once went through with no way back. Restoring
+    from one of these is a file copy; the alternative is retyping a month of
+    records from memory, which is not an alternative. Cheap insurance: the file
+    is well under a megabyte, and a failure here must never block the caller —
+    if the copy cannot be made, the caller still proceeds, it just proceeds
+    unprotected rather than not at all.
+
+    Returns the backup path, or None if it could not be written.
+    """
+    import shutil
+    from datetime import datetime
+    if not Path(DB_PATH).exists():
+        return None
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    target = Path(f"{DB_PATH}.autobackup-{tag}-{stamp}")
+    try:
+        # Checkpoint anything sitting in a journal so the copy is complete.
+        conn = get_connection()
+        conn.execute("PRAGMA wal_checkpoint(FULL)")
+        conn.close()
+        shutil.copy2(DB_PATH, target)
+        _prune_autobackups()
+        return target
+    except Exception:
+        return None
+
+
+def _prune_autobackups(keep=10):
+    """Keep the most recent few. Unbounded backups would quietly fill a disk."""
+    try:
+        found = sorted(Path(DB_PATH).parent.glob(f"{Path(DB_PATH).name}.autobackup-*"))
+        for old in found[:-keep]:
+            old.unlink()
+    except Exception:
+        pass
+
+
+def list_backups():
+    """Every snapshot sitting beside the database, newest first.
+
+    Covers both the automatic ones taken before a wipe and any hand-made
+    `tracker.db.backup-*` copies. Each entry carries its row counts, because
+    "restore a backup" is not a decision anyone can make from a filename — the
+    only question that matters is how much is in it.
+    """
+    base = Path(DB_PATH)
+    out = []
+    for path in list(base.parent.glob(base.name + ".autobackup-*")) + \
+                list(base.parent.glob(base.name + ".backup*")):
+        try:
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            counts = {}
+            for table in LEDGERS:
+                try:
+                    counts[table] = conn.execute(
+                        f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                except sqlite3.Error:
+                    counts[table] = 0
+            conn.close()
+        except sqlite3.Error:
+            continue                      # not a readable database; skip it
+        stat = path.stat()
+        out.append({"path": path, "name": path.name, "taken": stat.st_mtime,
+                    "size": stat.st_size, "counts": counts,
+                    "total": sum(counts.values()),
+                    "automatic": ".autobackup-" in path.name})
+    out.sort(key=lambda b: b["taken"], reverse=True)
+    return out
+
+
+def restore_backup(path):
+    """Replace the live database with a snapshot.
+
+    Takes a backup of what is being replaced first, so choosing the wrong
+    snapshot is itself recoverable — a restore that could destroy the thing you
+    were trying to protect would be a strange kind of safety feature.
+    """
+    import shutil
+    source = Path(path)
+    if not source.exists():
+        raise FileNotFoundError(source)
+    # Prove it is a usable ledger before overwriting anything with it.
+    conn = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
+    try:
+        for table in LEDGERS:
+            conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+    finally:
+        conn.close()
+    safety_backup("pre-restore")
+    shutil.copy2(source, DB_PATH)
+    init_db()                             # migrate an older snapshot in place
+    return True
+
+
 def clear_all():
-    """Wipe every ledger. Used by demo.clear() and the bot's reset tool."""
+    """Wipe every ledger. Used by demo.clear() only — no bot tool reaches this."""
+    safety_backup("clear_all")
     conn = get_connection()
     for table in LEDGERS:
         conn.execute(f"DELETE FROM {table}")
@@ -344,6 +476,7 @@ def erase_all():
     what it considers "demo data" should never be able to leave real records
     behind on a full reset.
     """
+    safety_backup("erase_all")
     conn = get_connection()
     for table in LEDGERS:
         conn.execute(f"DELETE FROM {table}")

@@ -29,6 +29,25 @@ Money you lent and have not been repaid is money you do not have. Money you
 borrowed and have not repaid is money you are holding. Both are cash facts, not
 paper ones. What stays on paper is the *obligation*, reported separately as the
 receivable and payable balances.
+
+Debts where no cash moved
+-------------------------
+The model above assumes a debt begins with a transfer. Often it does not. A
+friend buys your concert ticket: you owe him 3,000, but nobody handed you
+3,000, and treating it as a borrowing would inflate your cash on hand by money
+you never held. The mirror case is covering someone's bill on a card — the
+expense is already logged, so booking the receivable as a second departure
+would take the same 3,000 out twice.
+
+So a debt carries a `kind` (see `db.CASH` / `db.COVERED`) and only the opening
+leg is conditional:
+
+    kind     opening leg                 settlement leg
+    cash     moves cash (as above)       reverses it
+    covered  nothing — no cash moved     moves cash
+
+Both kinds owe and are owed identically; `receivable_open`, `payable_open` and
+net worth do not look at `kind` at all. Only cash on hand does.
 """
 from __future__ import annotations
 
@@ -103,8 +122,8 @@ _EMPTY = {
     "expenses": ["id", "date", "description", "category", "amount"],
     "transport": ["id", "date", "amount"],
     "income": ["id", "date", "source", "amount"],
-    "lent": ["id", "date", "person", "amount", "paid_back", "settled_date"],
-    "borrowed": ["id", "date", "lender", "amount", "paid_back", "settled_date"],
+    "lent": ["id", "date", "person", "amount", "paid_back", "settled_date", "kind"],
+    "borrowed": ["id", "date", "lender", "amount", "paid_back", "settled_date", "kind"],
 }
 
 
@@ -122,6 +141,13 @@ def _frame(rows, name):
         ]
     if "amount" in df.columns:
         df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
+    if name in ("lent", "borrowed"):
+        # A file migrated mid-session, or a hand-edited row, can leave this
+        # missing or blank. Absent means the old schema, and the old schema
+        # only ever held cash transfers.
+        if "kind" not in df.columns:
+            df["kind"] = db.CASH
+        df["kind"] = df["kind"].where(df["kind"].isin(list(db.KINDS)), db.CASH)
     return df
 
 
@@ -238,11 +264,46 @@ def set_net_same_month_debts(value: bool) -> None:
     _NET_SAME_MONTH_DEBTS = bool(value)
 
 
+def _cash_leg(df):
+    """Rows whose *opening* leg actually moved cash.
+
+    A COVERED debt has no opening leg — nobody handed anything over — so it
+    must not be counted as cash out when lent, or cash in when borrowed. Its
+    settlement still counts, and is taken from the unfiltered frame.
+    """
+    if df.empty or "kind" not in df.columns:
+        return df
+    return df[df["kind"] == db.CASH]
+
+
+def debt_cash_contribution(table: str, amount: float, kind: str,
+                           settled: bool) -> float:
+    """What one debt row currently contributes to cash on hand.
+
+    Deleting the row reverses exactly this, which is what the confirmation in
+    the debts table quotes before anything is removed. It lives here rather
+    than in the UI so the figure shown and the figure the model produces come
+    from one definition and cannot drift apart.
+    """
+    moved = (kind == db.CASH)
+    if table == "lent":
+        # Cash out when handed over, back in when repaid.
+        return (-amount if moved else 0.0) + (amount if settled else 0.0)
+    # borrowed: cash in when received, out again when repaid.
+    return (amount if moved else 0.0) + (-amount if settled else 0.0)
+
+
 def _roundtrip_mask(df):
-    """Rows opened and settled inside the same month."""
+    """Rows opened and settled inside the same month, where both legs cancel."""
     if df.empty or "paid_back" not in df.columns or "_settled_m" not in df.columns:
         return None
-    return (df["paid_back"] == 1) & (df["_settled_m"] == df["_m"])
+    same = (df["paid_back"] == 1) & (df["_settled_m"] == df["_m"])
+    if "kind" in df.columns:
+        # Only a CASH debt is a true round trip. A COVERED one has nothing on
+        # the opening leg for the settlement to cancel against, so netting it
+        # away would delete a payment that really did leave the account.
+        same = same & (df["kind"] == db.CASH)
+    return same
 
 
 def _without_roundtrips(df):
@@ -283,8 +344,11 @@ def month_series(frames: Frames, through: str | None = None) -> dict[str, MonthR
         # totals stay consistent with the rows shown on the board.
         lent_v = _without_roundtrips(frames.lent)
         borr_v = _without_roundtrips(frames.borrowed)
-        row.lent_out = _sum(lent_v, lent_v["_m"] == key) if not lent_v.empty else 0.0
-        row.borrowed_in = _sum(borr_v, borr_v["_m"] == key) if not borr_v.empty else 0.0
+        # The opening leg counts only for debts where cash changed hands.
+        lent_c = _cash_leg(lent_v)
+        borr_c = _cash_leg(borr_v)
+        row.lent_out = _sum(lent_c, lent_c["_m"] == key) if not lent_c.empty else 0.0
+        row.borrowed_in = _sum(borr_c, borr_c["_m"] == key) if not borr_c.empty else 0.0
 
         if not lent_v.empty:
             row.lent_returned = _sum(
@@ -419,8 +483,8 @@ def snapshot(frames: Frames, key: str) -> Snapshot:
         row.transport = _sum(frames.transport)
         lent_v = _without_roundtrips(frames.lent)
         borr_v = _without_roundtrips(frames.borrowed)
-        row.lent_out = _sum(lent_v)
-        row.borrowed_in = _sum(borr_v)
+        row.lent_out = _sum(_cash_leg(lent_v))
+        row.borrowed_in = _sum(_cash_leg(borr_v))
         if not lent_v.empty:
             row.lent_returned = _sum(lent_v, lent_v["paid_back"] == 1)
         if not borr_v.empty:
@@ -491,7 +555,10 @@ def _arrivals(frames: Frames, key: str) -> pd.DataFrame:
                          "platform": "Returned", "amount": r["amount"],
                          "kind": "lent_returned", "id": r["id"]})
 
-    borr = _in_period(_without_roundtrips(frames.borrowed), key)
+    # Only cash borrowings arrive. A debt someone covered on your behalf put
+    # nothing in your hand, so listing it here would show an arrival that never
+    # happened — and would not match the arrivals headline, which excludes it.
+    borr = _in_period(_cash_leg(_without_roundtrips(frames.borrowed)), key)
     for r in borr.to_dict("records"):
         rows.append({"date": r["date"], "label": f"Borrowed from {r['lender']}",
                      "platform": "Loan", "amount": r["amount"],
@@ -517,7 +584,9 @@ def _departures(frames: Frames, key: str) -> pd.DataFrame:
                      "platform": "Transportation", "amount": r["amount"],
                      "kind": "transport", "id": r["id"]})
 
-    lent = _in_period(_without_roundtrips(frames.lent), key)
+    # Same rule on this side: covering someone's bill on a card already logged
+    # as an expense is not a second departure.
+    lent = _in_period(_cash_leg(_without_roundtrips(frames.lent)), key)
     for r in lent.to_dict("records"):
         rows.append({"date": r["date"], "label": f"Lent to {r['person']}",
                      "platform": "Lent", "amount": r["amount"],

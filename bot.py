@@ -12,9 +12,10 @@ Three things changed from the previous version:
    finished reply character by character. Text now arrives as the model
    produces it.
 
-3. **Reset is guarded.** `reset_ledger` used to be a plain tool the model could
-   fire from a loose sentence. It now demands an exact confirmation phrase the
-   user has to supply.
+3. **It cannot delete anything.** `reset_ledger` used to be a tool, guarded by a
+   confirmation phrase — which the model could read off the tool's own docstring
+   and pass to itself. It did, and erased a real August. Every tool here is now
+   additive; erasing is a button in Settings only. See the note above `TOOLS`.
 """
 # Deliberately NOT `from __future__ import annotations`. That turns every
 # annotation into a string at runtime, and google-genai builds each tool's
@@ -65,7 +66,14 @@ FALLBACK_MODELS = [
 # off the preferred one.
 ACTIVE_MODEL = MODEL
 
-RESET_PHRASE = "RESET LOOT LEDGER"
+# There is deliberately no reset/erase tool. There used to be one, guarded by a
+# confirmation phrase the model had to pass in. That guard was worthless: the
+# phrase was written in the tool's own docstring, so the model could read it and
+# satisfy the check itself. On 3 September 2026 it did exactly that during a
+# confused exchange about a debt and erased every ledger — the whole of August.
+# A confirmation only means something when it comes from outside the thing being
+# confirmed, so erasing now exists solely as a button in Settings, where a human
+# clicks it. Tools the model can fire are all additive; nothing here deletes.
 
 
 def model_chain() -> list[str]:
@@ -233,34 +241,54 @@ def log_income(source: str, amount: float, date_str: str = "") -> str:
     return f"Logged {finance.money(abs(float(amount)))} of income from {source.strip()} on {finance.display_date(d)}."
 
 
-def log_lent(person: str, amount: float, date_str: str = "") -> str:
-    """Record money handed to someone that you expect back — a receivable.
-
-    This is cash leaving your hands now, so it reduces cash on hand until repaid.
+def log_lent(person: str, amount: float, date_str: str = "", how: str = "cash") -> str:
+    """Record something someone owes you — a receivable.
 
     Args:
-        person: who took the money.
+        person: who owes you.
         amount: the amount in rupees, positive.
-        date_str: the date it was handed over. Defaults to today.
+        date_str: the date the debt started. Defaults to today.
+        how: "cash" when you handed them money, which leaves your cash on hand
+            now and returns when they repay. "covered" when you paid for
+            something on their behalf rather than giving them money — your cash
+            on hand does not move now, because the purchase itself is what took
+            the money out, and it comes back only when they settle up.
+            Use "covered" for "I paid for his dinner, he owes me".
     """
     d = finance.parse_date(date_str) if date_str else _today()
-    db.add_lent(d, person.strip(), abs(float(amount)))
-    return f"Recorded {finance.money(abs(float(amount)))} lent to {person.strip()} on {finance.display_date(d)}."
+    k = db.clean_kind((how or "").strip().lower())
+    db.add_lent(d, person.strip(), abs(float(amount)), k)
+    tail = ("Your cash on hand is unchanged; it goes up when they settle."
+            if k == db.COVERED else
+            "That has come out of your cash on hand until they repay.")
+    return (f"Recorded {finance.money(abs(float(amount)))} owed to you by "
+            f"{person.strip()} on {finance.display_date(d)}. {tail}")
 
 
-def log_borrowed(lender: str, amount: float, date_str: str = "") -> str:
-    """Record money you took from someone and owe back — a payable.
-
-    This is cash arriving now, so it raises cash on hand until you repay it.
+def log_borrowed(lender: str, amount: float, date_str: str = "", how: str = "cash") -> str:
+    """Record something you owe someone — a payable.
 
     Args:
-        lender: who you borrowed from.
+        lender: who you owe.
         amount: the amount in rupees, positive.
-        date_str: the date you received it. Defaults to today.
+        date_str: the date the debt started. Defaults to today.
+        how: "cash" when they handed you money, which raises your cash on hand
+            now and lowers it when you repay. "covered" when they paid for
+            something on your behalf instead of giving you money — nothing was
+            handed to you, so your cash on hand must NOT go up; it goes down
+            only when you repay them. Use "covered" for "he bought me a ticket,
+            I owe him for it". If the user says no money reached them, it is
+            "covered".
     """
     d = finance.parse_date(date_str) if date_str else _today()
-    db.add_borrowed(d, lender.strip(), abs(float(amount)))
-    return f"Recorded {finance.money(abs(float(amount)))} borrowed from {lender.strip()} on {finance.display_date(d)}."
+    k = db.clean_kind((how or "").strip().lower())
+    db.add_borrowed(d, lender.strip(), abs(float(amount)), k)
+    tail = ("Your cash on hand is unchanged, since nothing was handed to you; "
+            "it drops when you repay."
+            if k == db.COVERED else
+            "That has been added to your cash on hand until you repay it.")
+    return (f"Recorded {finance.money(abs(float(amount)))} owed by you to "
+            f"{lender.strip()} on {finance.display_date(d)}. {tail}")
 
 
 def settle_debt(direction: str, person: str, date_str: str = "") -> str:
@@ -339,26 +367,20 @@ def list_open_debts() -> str:
     return "\n".join(lines)
 
 
-def reset_ledger(confirm_phrase: str) -> str:
-    """Erase every record in every ledger. Irreversible.
+def where_to_reset() -> str:
+    """Explain how the user erases their records. Reads nothing, changes nothing.
 
-    Never call this on a loose request. Ask the user to type the exact phrase
-    first, quote the phrase to them, and only call this once they have sent it
-    back verbatim.
-
-    Args:
-        confirm_phrase: must be exactly "RESET LOOT LEDGER".
+    Call this when the user asks to reset, clear, wipe or start over. There is
+    no tool that deletes records; this only tells them where the button is.
     """
-    if (confirm_phrase or "").strip() != RESET_PHRASE:
-        return (f"Not reset — the confirmation phrase did not match. "
-                f"Ask the user to send exactly: {RESET_PHRASE}")
-    db.clear_all()
-    return "Every ledger has been cleared."
+    return ("Erasing records is not something I can do. It lives in "
+            "Settings → Danger zone → Erase everything, where it asks for "
+            "confirmation and takes a backup first.")
 
 
 TOOLS = [
     log_expense, log_transport, log_income, log_lent, log_borrowed,
-    settle_debt, month_summary, list_open_debts, reset_ledger,
+    settle_debt, month_summary, list_open_debts, where_to_reset,
 ]
 
 
