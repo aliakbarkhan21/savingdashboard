@@ -26,8 +26,11 @@ sh.CurrentDirectory = here
 sh.Run "cmd /c for /f ""tokens=5"" %p in ('netstat -ano ^| findstr "":8501"" ^| findstr ""LISTENING""') do taskkill /PID %p /F", 0, True
 WScript.Sleep 1500
 
+' --server.headless true stops Streamlit opening its own browser tab the
+' moment it binds the port — without it, this script's own open below landed
+' as a *second* tab a few seconds later, on top of Streamlit's automatic one.
 ' 0 = hidden window, False = do not wait for it to finish
-sh.Run "cmd /c python -m streamlit run app.py > lootledger.log 2>&1", 0, False
+sh.Run "cmd /c python -m streamlit run app.py --server.headless true > lootledger.log 2>&1", 0, False
 
 ' Give the server a moment to bind the port before the browser asks for it.
 WScript.Sleep 8000
