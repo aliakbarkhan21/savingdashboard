@@ -67,9 +67,22 @@ Two things a generic expense tracker does not do:
 - Currency is Pakistani Rupees, displayed as `Rs.` with thousands separators and two
   decimals. Dates are entered and displayed as DD/MM/YYYY; stored as ISO `YYYY-MM-DD`.
 - Data is a local SQLite file (`tracker.db`), which is gitignored. **Local and deployed
-  therefore hold two entirely separate databases, and neither syncs to the other.** The
-  Cloud copy is also ephemeral: a reboot re-clones the repo, and since the file is not in
-  it, the deployed ledger starts empty again. Treat the local file as the real one.
+  hold two entirely separate databases, and this is now a deliberate design rather than an
+  accident.** The laptop instance is the real ledger; the deployment is a sample board.
+
+  The deployed copy is ephemeral — a reboot re-clones the repo, and the database file is
+  not in it — which was read as a bug to be fixed with a hosted database. That fix would
+  have been wrong: a Community Cloud app answers to anyone holding the URL, so persisting
+  the real ledger there would have published real names and amounts permanently. The
+  ephemerality was doing an accidental job of keeping it private, and the thing genuinely
+  broken was only that strangers landed on an empty board.
+
+  So the deployment sets `LOOT_LEDGER_DEMO = "1"` and seeds its own labelled sample records
+  on an empty database. The real ledger never leaves the laptop. Phone access to the real
+  figures is by tunnelling to the laptop instance, not by copying data to the cloud — and
+  because a tunnel puts that instance on the internet, `LOOT_LEDGER_PASSWORD` (or a full
+  `[auth]` OIDC block) puts a gate in front of it. See `access.py`; the gate runs before
+  anything renders, so no record reaches the browser unauthenticated.
 - Typefaces are self-hosted from `static/fonts` (Barlow and Barlow Condensed, latin
   subset). Previously fetched from Google Fonts at runtime; when that request was slow or
   filtered the whole product silently fell back to Arial Narrow and looked like a cheap

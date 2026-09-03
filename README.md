@@ -120,6 +120,33 @@ scratch instance beside your real one.
 > the database holds your complete financial history and the secrets file holds
 > a live API key.
 
+### Reaching it from your phone
+
+The deployed copy on Streamlit Community Cloud is a **sample board, not your
+ledger** — it seeds generated records and says so. That is deliberate. A
+Community Cloud app answers to anyone holding the URL, so putting a real
+financial history behind that link would publish it; the fact that its storage
+resets on every reboot was quietly protecting you.
+
+To use the real board on a phone, reach the machine it already runs on:
+
+1. Install [Tailscale](https://tailscale.com/) on the laptop and the phone and
+   sign both into the same account. The laptop gets a stable private address
+   that only your devices can reach.
+2. Start the app so it listens beyond localhost:
+   ```bash
+   python -m streamlit run app.py --server.address 0.0.0.0
+   ```
+3. Open `http://<tailscale-address>:8501` on the phone.
+
+**Put a gate in front of it first.** Once the app is reachable from anywhere it
+needs one, even on a private network — set `LOOT_LEDGER_PASSWORD` in
+`.streamlit/secrets.toml`, or configure the `[auth]` block for a real Google
+sign-in. Both are described in `.streamlit/secrets.toml.example`. The check runs
+before the page renders, so nothing is served to an unauthenticated visitor —
+not a figure, not a name. With neither set the app stays open, which is the
+right default on a laptop nothing can reach.
+
 ---
 
 ## Layout
@@ -135,6 +162,7 @@ scratch instance beside your real one.
 | `importer.py` | CSV and Excel reading, column guessing, row building. |
 | `rates.py` | Daily FX rates, cached in `meta`, with an offline fallback. |
 | `demo.py` | Labelled sample data. |
+| `access.py` | Who may open the board, and which instance shows real records. |
 | `DESIGN.md` | The design system, recorded from the built result. |
 | `PRODUCT.md` | Product truth: users, constraints, principles. |
 
