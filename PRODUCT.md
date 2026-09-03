@@ -35,8 +35,18 @@ from.
 Two things a generic expense tracker does not do:
 
 1. **Debt is modeled as cash movement, not just a balance.** Receivables and payables are
-   tracked separately from expenses, and only *paid-back* debt moves the savings figure —
-   unpaid balances are owed on paper and deliberately do not touch cash on hand.
+   tracked separately from expenses, and *both legs* move cash: lending money takes it out
+   of your hand now and repayment brings it back, so a settled loan nets to zero. Money
+   lent and not yet returned is money you do not have; money borrowed and not yet repaid
+   is money you are holding. The obligation itself is reported separately, as the
+   receivable and payable balances.
+
+   A debt also records **how it started**, because the two are not the same fact. A friend
+   buying your ticket leaves you owing him without putting a rupee in your hand, so it must
+   not raise cash on hand — only repaying it lowers cash. Each debt is therefore `cash`
+   (money changed hands, both legs move) or `covered` (nothing changed hands, only the
+   settlement moves). Missing this distinction is how a ledger invents money that was never
+   held. See the "Debts where no cash moved" note in `finance.py`.
 2. **The ledger is writable in natural language.** A Gemini-backed Finance Bot holds live
    tool access to the database and can log expenses, transport, income, and debts from a
    sentence, a pasted CSV, or a photo of a receipt.
@@ -83,7 +93,13 @@ like a default.
 
 **Five ledgers:** `expenses` (date, description, category, amount), `transport`
 (date, amount), `income` (date, source, amount), `lent` (date, person, amount,
-paid_back), `borrowed` (date, lender, amount, paid_back).
+paid_back, settled_date, kind), `borrowed` (date, lender, amount, paid_back,
+settled_date, kind). `kind` is `cash` or `covered`; `init_db` adds it to older files and
+backfills `cash`, which is correct for them — before the column existed there was no way
+to record a debt where no money changed hands.
+
+Amounts are stored as integer paisa, converted at the storage boundary, so the rest of the
+app works in rupee floats and never sees paisa.
 
 **Eight fixed categories:** Food, Games, Hangouts, Shopping, Subscriptions,
 Transportation, Utilities, Other. Transport is a separate ledger *and* appears as a
@@ -105,6 +121,21 @@ rollup. Debts can optionally ignore the month filter, since they carry across mo
 **Known undecided:** whether transport should stay a separate ledger or collapse into
 the Transportation category. Not resolved; do not silently merge them.
 
+**The bot cannot delete anything, by construction.** It once had a `reset_ledger` tool
+guarded by a confirmation phrase the model had to supply — but the phrase was written in
+the tool's own docstring, so the model could read it and satisfy the guard itself. On
+3 September 2026 it did, mid-way through a confused exchange about a debt, and erased
+every ledger. August was lost; none of the three `tracker.db.backup-*` files held it, as
+all three turned out to contain demo seed data. It was rebuilt from the user's own
+spreadsheet, reconciled category by category against that sheet's own totals.
+
+Two rules came out of it, and both are load-bearing:
+- Every tool the model can reach is **additive**. Erasing is a button a human presses.
+  A confirmation is only a confirmation when it comes from outside the thing confirming.
+- `db.safety_backup()` copies the database before anything destructive, and Settings →
+  Restore lists those snapshots with their row counts and puts one back. Restoring backs
+  up the current file first, so it is reversible in both directions.
+
 ## Brand Commitments
 
 - Name: **Loot Ledger**. The playful name is deliberate and stays.
@@ -120,12 +151,18 @@ the Transportation category. Not resolved; do not silently merge them.
 - A live, working Gemini API key and confirmed access to `gemini-3.6-flash`, verified
   this session including end-to-end tool-calling.
 - `finance_data.csv` (83 bytes) — a near-empty stub, not real historical data.
-- **`tracker.db` now holds demo data, not real history** — 32 expenses, 3 income rows and
-  1 transport row, loaded through the in-app "Load sample data" control. It was empty when
-  this document was written. There is still no real transaction history, no user
-  testimonials and no usage metrics. The rule is unchanged and now load-bearing: nothing
-  in this project may present invented balances as Ali's real finances, and any sample
-  figures must stay visibly labeled as demo data.
+- **`tracker.db` holds real history again** — August 2026 rebuilt from
+  `Personal Savings & Expense Tracker.xlsx` after the erasure described above: 29 expenses,
+  2 income rows, 3 lent and 2 borrowed, plus the September rows entered since. All seven
+  category totals reconcile exactly against the spreadsheet's own summary column, and the
+  income total matches the figure preserved in the cached August digest. The opening
+  balance is still unset, so cash on hand reads lower than reality until it is filled in
+  under Settings.
+- There are still no user testimonials and no usage metrics. The rule is unchanged and
+  load-bearing: nothing in this project may present invented balances as Ali's real
+  finances, and any sample figures must stay visibly labeled as demo data. The screenshots
+  in `README.md` and the case study are generated from a seeded scratch database for
+  exactly this reason.
 
 ## Product Principles
 

@@ -135,6 +135,40 @@ def next_starter(shown: list[int]) -> int:
 # clock involved and nothing to go wrong across timezones.
 LAST_SEEN_KEY = "last_seen_ids"
 
+# How a debt started, in the words someone would actually use for it. The two
+# options differ in one respect only — whether cash moved when the debt was
+# created — but that difference decides whether cash on hand goes up, down or
+# nowhere, so each option states its consequence rather than leaving it to be
+# inferred. See the "Debts where no cash moved" note in finance.py.
+DEBT_HOW = {
+    "lent": {
+        db.CASH: {
+            "label": "I gave them cash",
+            "short": "Cash",
+            "effect": "Leaves your cash now, comes back when they repay.",
+        },
+        db.COVERED: {
+            "label": "I paid for something on their behalf",
+            "short": "Covered",
+            "effect": "Your cash does not move now — log the purchase itself as "
+                      "an expense. Marking it settled brings the money back in.",
+        },
+    },
+    "borrowed": {
+        db.CASH: {
+            "label": "They gave me cash",
+            "short": "Cash",
+            "effect": "Adds to your cash now, leaves again when you repay.",
+        },
+        db.COVERED: {
+            "label": "They paid for something on my behalf",
+            "short": "Covered",
+            "effect": "Your cash does not move now — nothing was handed to you. "
+                      "Marking it settled is what takes the money out.",
+        },
+    },
+}
+
 
 def _current_max_ids() -> dict:
     getters = {"expenses": db.get_expenses, "transport": db.get_transport,
@@ -319,12 +353,36 @@ def _touch_data() -> None:
 _init_state()
 
 
+def _db_fingerprint() -> tuple:
+    """Something that changes whenever the database file does.
+
+    st.cache_data is a PROCESS-wide cache, but `data_version` is per session and
+    starts at 0 for each new one. Keyed on that alone, a browser session opened
+    after a write was handed the entry cached under version 0 — the snapshot
+    taken when the server first started. The board would then show records as
+    they were hours earlier, while the "since you last looked" strip, which
+    reads the database directly, showed the real ones. Since this launcher keeps
+    one server running for days, that window was wide open: close the tab,
+    reopen it, and the month looked wrong.
+
+    The file's size and modification time are process-wide facts about the data
+    itself, so every session agrees on them. `data_version` is kept alongside as
+    a second key because a write and the reread that follows it can land inside
+    one filesystem timestamp tick.
+    """
+    try:
+        stat = db.DB_PATH.stat()          # already a pathlib.Path
+        return (stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return (0, 0)
+
+
 @st.cache_data
-def _load_frames_cached(version: int) -> finance.Frames:
+def _load_frames_cached(fingerprint: tuple, version: int) -> finance.Frames:
     return finance.load_frames()
 
 
-frames = _load_frames_cached(st.session_state.data_version)
+frames = _load_frames_cached(_db_fingerprint(), st.session_state.data_version)
 # Set before a single figure is formatted. The ledger stays in PKR; this only
 # decides what the board is read in, and get_rates() answers from a day-old
 # cache unless the date has rolled over, so a page load costs no network call.
@@ -533,10 +591,23 @@ with st.sidebar:
         elif kind == "Lent out":
             who = st.text_input("Who took it", placeholder="Sara")
             amount = st.number_input(f"Amount ({CURRENCY})", min_value=0.0, step=500.0, format="%.2f")
-            st.caption("Cash leaves you now and returns when they repay.")
+            # A debt is two separate facts: what is owed, and whether cash
+            # actually moved when it started. Usually the same event; not
+            # always. Getting this wrong invents or destroys money, so it is
+            # asked outright rather than assumed.
+            # Each consequence is attached to its own option rather than shown
+            # in one caption below. Widgets inside a form do not rerun the page
+            # on change, so a single caption keeps describing whichever option
+            # was selected when the page last ran — it sat there reading "adds
+            # to your cash now" while the opposite option was ticked.
+            how = st.radio(
+                "How it happened", list(DEBT_HOW["lent"]),
+                format_func=lambda k: DEBT_HOW["lent"][k]["label"],
+                captions=[v["effect"] for v in DEBT_HOW["lent"].values()],
+                key="lent_how", horizontal=False)
             if st.form_submit_button("Record receivable", width="stretch", type="primary"):
                 if who.strip() and amount > 0:
-                    db.add_lent(str(when), who.strip(), to_pkr(amount))
+                    db.add_lent(str(when), who.strip(), to_pkr(amount), how)
                     _touch_data()
                     st.rerun()
                 else:
@@ -545,10 +616,14 @@ with st.sidebar:
         else:
             who = st.text_input("Who you owe", placeholder="Bhai")
             amount = st.number_input(f"Amount ({CURRENCY})", min_value=0.0, step=500.0, format="%.2f")
-            st.caption("Cash arrives now and leaves again when you repay.")
+            how = st.radio(
+                "How it happened", list(DEBT_HOW["borrowed"]),
+                format_func=lambda k: DEBT_HOW["borrowed"][k]["label"],
+                captions=[v["effect"] for v in DEBT_HOW["borrowed"].values()],
+                key="borrowed_how", horizontal=False)
             if st.form_submit_button("Record payable", width="stretch", type="primary"):
                 if who.strip() and amount > 0:
-                    db.add_borrowed(str(when), who.strip(), to_pkr(amount))
+                    db.add_borrowed(str(when), who.strip(), to_pkr(amount), how)
                     _touch_data()
                     st.rerun()
                 else:
@@ -1342,7 +1417,9 @@ with stage:
 
         with t_debt:
             st.caption("Ticking Settled records the repayment as today's cash movement, "
-                       "so it lands in this month's figures.")
+                       "so it lands in this month's figures. **How** says whether "
+                       "cash moved when the debt started — change it here if one "
+                       "was recorded the wrong way round.")
             d1, d2 = st.columns(2)
             for column, table, name_col, heading in (
                 (d1, "lent", "person", "Owed to you"),
@@ -1354,7 +1431,8 @@ with stage:
                     if source.empty:
                         st.caption("Nothing on the books.")
                         continue
-                    view = source[["id", "date", name_col, "amount", "paid_back"]].copy()
+                    view = source[["id", "date", name_col, "amount",
+                                   "kind", "paid_back"]].copy()
                     view["days"] = view["date"].map(
                         lambda d: (date.today()
                                   - datetime.strptime(str(d)[:10], "%Y-%m-%d").date()).days)
@@ -1396,6 +1474,15 @@ with stage:
                     # checkbox, so a displayed figure never travels back to the
                     # database.
                     view["amount"] = view["amount"].map(finance.to_display)
+                    # Shown as the everyday phrase, not the stored token. The
+                    # map back on write-back is by label, so both directions
+                    # come from the same dict and cannot drift apart.
+                    how_labels = {k: v["short"] for k, v in DEBT_HOW[table].items()}
+                    back_to_kind = {v: k for k, v in how_labels.items()}
+                    view["kind"] = view["kind"].map(
+                        lambda k: how_labels.get(k, how_labels[db.CASH]))
+                    view.insert(len(view.columns), "remove", False)
+
                     edited = st.data_editor(
                         view, key=f"edit_{table}", hide_index=True, width="stretch",
                         disabled=["id", "date", name_col, "amount", "days"],
@@ -1405,20 +1492,71 @@ with stage:
                             name_col: "Name",
                             "amount": st.column_config.NumberColumn(
                                 f"Amount ({CURRENCY})", format=f"{CURRENCY_SYMBOL} %.2f"),
+                            "kind": st.column_config.SelectboxColumn(
+                                "How", options=list(how_labels.values()), required=True,
+                                help="Cash: money changed hands when this started. "
+                                     "Covered: it did not — only settling moves cash."),
                             "days": st.column_config.NumberColumn(
                                 "Days", help="Days since this debt was recorded"),
                             "paid_back": st.column_config.CheckboxColumn("Settled"),
+                            "remove": st.column_config.CheckboxColumn(
+                                "Remove", help="Tick, then confirm below to delete."),
                         },
                     )
+
                     touched = False
-                    for before, after in zip(view.to_dict("records"), edited.to_dict("records")):
+                    for before, after in zip(view.to_dict("records"),
+                                             edited.to_dict("records")):
                         if bool(before["paid_back"]) != bool(after["paid_back"]):
                             db.set_paid_back(table, int(before["id"]),
                                              bool(after["paid_back"]), str(date.today()))
                             touched = True
+                        if before["kind"] != after["kind"]:
+                            db.update_row(table, int(before["id"]),
+                                          kind=back_to_kind.get(after["kind"], db.CASH))
+                            touched = True
                     if touched:
                         _touch_data()
                         st.rerun()
+
+                    # ---- deletion, behind a confirm ------------------------
+                    # Deliberately two steps. This app has already lost a month
+                    # of records to a delete that nothing stood in front of, and
+                    # a stray click in a grid is exactly that hazard again. The
+                    # cash consequence is spelled out before the button, because
+                    # removing a debt silently moves the headline figure.
+                    marked = [r for r in edited.to_dict("records") if r.get("remove")]
+                    if marked:
+                        ids = [int(r["id"]) for r in marked]
+                        effect = 0.0
+                        for r in marked:
+                            raw = source[source["id"] == int(r["id"])]
+                            if raw.empty:
+                                continue
+                            row = raw.iloc[0]
+                            # Removing the row reverses whatever it currently
+                            # contributes to cash on hand.
+                            effect -= finance.debt_cash_contribution(
+                                table, float(row["amount"]), row["kind"],
+                                int(row["paid_back"]) == 1)
+                        names = ", ".join(str(r[name_col]) for r in marked)
+                        if abs(effect) < 0.005:
+                            wording = "Your cash on hand will not change."
+                        else:
+                            direction = "add" if effect > 0 else "subtract"
+                            wording = (f"This will {direction} "
+                                       f"{finance.money(abs(effect))} "
+                                       f"{'to' if effect > 0 else 'from'} your cash on hand.")
+                        st.warning(
+                            f"Delete {len(marked)} "
+                            f"{'entry' if len(marked) == 1 else 'entries'} "
+                            f"({names})? {wording} This cannot be undone.")
+                        if st.button(f"Delete {len(marked)} permanently",
+                                     key=f"del_debt_{table}", width="stretch"):
+                            for row_id in ids:
+                                db.delete_row(table, row_id)
+                            _touch_data()
+                            st.rerun()
 
         with t_imp:
             # Auto sits first and is the default. A hand-kept sheet usually
@@ -2169,6 +2307,62 @@ def settings_dialog():
         file_name=f"loot-ledger-{date.today().isoformat()}.csv",
         mime="text/csv", width="stretch", key="export_csv",
         disabled=total_rows == 0)
+
+    st.divider()
+    st.markdown("**Restore a snapshot**")
+    # This exists because a wipe once went through with nothing behind it and a
+    # month of real records went with it. A snapshot is now taken automatically
+    # before anything destructive, but a backup nobody can reach is not a
+    # backup, so they are listed here with their row counts and can be put back.
+    snapshots = db.list_backups()
+    if not snapshots:
+        st.caption("No snapshots yet. One is taken automatically before "
+                   "anything that erases records.")
+    else:
+        st.caption(f"{len(snapshots)} available. One is taken automatically "
+                   f"before anything that erases records, and restoring backs "
+                   f"up the current file first, so this is reversible too.")
+        labels = {}
+        for snap in snapshots:
+            when = datetime.fromtimestamp(snap["taken"]).strftime("%d %b %Y, %H:%M")
+            tag = "auto" if snap["automatic"] else "manual"
+            labels[snap["name"]] = (
+                f"{when}  ·  {snap['total']} records  ·  {tag}")
+        chosen = st.selectbox(
+            "Snapshot", list(labels), format_func=lambda n: labels[n],
+            key="restore_pick", label_visibility="collapsed")
+        picked = next(s for s in snapshots if s["name"] == chosen)
+        st.caption("  ·  ".join(
+            f"{name}: {picked['counts'].get(name, 0)}" for name in db.LEDGERS))
+
+        # Armed in two steps, and deliberately without a rerun on arming, for
+        # the same reason the reset below is — a rerun closes this dialog.
+        if not st.session_state.get("restore_armed"):
+            if st.button("Restore this snapshot", width="stretch",
+                         key="restore_start", disabled=picked["total"] == 0):
+                st.session_state.restore_armed = True
+        if st.session_state.get("restore_armed"):
+            st.warning(
+                f"This replaces all {total_rows} current records with the "
+                f"{picked['total']} in this snapshot.")
+            rc1, rc2 = st.columns(2)
+            with rc1:
+                if st.button("Yes, restore", type="primary", width="stretch",
+                             key="restore_confirm"):
+                    try:
+                        db.restore_backup(picked["path"])
+                    except Exception as exc:
+                        st.session_state.restore_armed = False
+                        st.error(f"Could not restore that snapshot: {exc}")
+                    else:
+                        st.session_state.restore_armed = False
+                        st.session_state.messages = []
+                        _touch_data()
+                        st.rerun()
+            with rc2:
+                if st.button("Cancel", width="stretch", key="restore_cancel"):
+                    st.session_state.restore_armed = False
+                    st.rerun()
 
     st.divider()
     st.markdown("**Reset**")
