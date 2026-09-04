@@ -1974,13 +1974,30 @@ div.st-key-clear_chat button {
    each to the right edge of its own slot, which keeps the pair tight against
    the board's right margin at any container width instead of drifting apart as
    the column grows. */
+/* The pair sits on its side and hard right, tight to each other. As two
+   separate columns the space between them was the row's gap plus each
+   column's leftover width — 30px, which read as two unrelated buttons
+   rather than one control cluster. */
+.st-key-ll_toolbar {
+  flex-direction: row !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: var(--s2) !important;
+}
+.st-key-ll_toolbar [data-testid="stElementContainer"] {
+  width: auto !important;
+  flex: 0 0 auto !important;
+}
+/* Square, and the same height as the search field beside them so the row
+   reads as one line rather than three things that happen to be near each
+   other. */
 .st-key-toggle_bot button,
 .st-key-open_settings button {
-  width: 38px !important;
-  min-width: 38px !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  margin-left: auto !important;
+  width: 39px !important;
+  min-width: 39px !important;
+  height: 39px !important;
+  min-height: 39px !important;
+  padding: 0 !important;
 }
 .st-key-toggle_bot button > div,
 .st-key-open_settings button > div { gap: 0 !important; }
@@ -1990,11 +2007,15 @@ div.st-key-clear_chat button {
    whole point of moving them out of the top-left. Selector spelled out to the
    exact child chain: a looser :has() also matches the outer stage/rail row,
    which would drag the entire board up by the same amount. */
-[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]
-    > [data-testid="stVerticalBlock"] > .st-key-toggle_bot) {
-  margin-top: calc(var(--s4) * -1) !important;
-  margin-bottom: calc(var(--s3) * -1) !important;
-}
+/* No margin override on the row itself. It needed one when it held two
+   floating buttons and nothing else — the band read as empty page and had to
+   be pulled shut. Now that the search box shares the line it is a real row and
+   Streamlit's own rhythm already lands it evenly: measured 16px above and 17px
+   below. A rule was written for it and deleted rather than left in, because
+   the chain it guessed (column > block > container) omits the stLayoutWrapper
+   Streamlit puts in between, so it matched nothing — and the obvious loose
+   rewrite matches two rows, the second being the outer stage/rail, which would
+   have moved the whole board instead. */
 """
 
 

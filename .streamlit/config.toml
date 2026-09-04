@@ -14,6 +14,26 @@ enableStaticServing = true
 # debugged, so the developer toolbar and its shortcuts are switched off.
 toolbarMode = "viewer"
 
+# Which origins may drive this app over Streamlit's host-communication channel.
+# Set because themesync.html uses it: the board's light/dark toggle hands
+# Streamlit a new theme at runtime so the canvas-painted tables repaint in place
+# instead of the page being reloaded. That message is only accepted from an
+# origin listed here, and it is the app posting to ITSELF, so these are just the
+# addresses this app is served from. Wildcards are supported and the port may be
+# one. 100.* is the Tailscale range, for reaching the board from a phone.
+#
+# Setting this REPLACES Streamlit's built-in list, so the Community Cloud
+# entries are repeated here — without them the deployed copy loses the same
+# channel. Deliberately not "http://*": that would let any page which framed
+# this one drive it.
+allowedOrigins = [
+  "http://localhost:*",
+  "http://127.0.0.1:*",
+  "http://100.*",
+  "https://*.streamlit.app",
+  "https://share.streamlit.io",
+]
+
 # The Departure Board world is a dark enamel panel, and committing that here
 # stops Streamlit's own light default from fighting the stylesheet on first paint.
 #
