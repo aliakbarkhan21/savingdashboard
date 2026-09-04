@@ -879,7 +879,19 @@ with stage:
     # column carries the width; the buttons are last so they end up at the far
     # edge, and each keeps its name in a tooltip since the glyph is now the
     # only label.
-    _, ctl_c, ctl_bot, ctl_set = st.columns([9.0, 1.9, 0.45, 0.45])
+    # Search and the two controls share one line. They were three stacked rows
+    # — expander, then a right-aligned pair of buttons, then a left-aligned
+    # search box — which left two bands of empty page between them and lined
+    # nothing up with anything. One row, centred on a common baseline: the
+    # search where reading starts, the chrome where it ends.
+    ctl_search, ctl_c, ctl_btns = st.columns(
+        [3.0, 5.0, 1.0], vertical_alignment="center")
+    with ctl_search:
+        # Rendered here, read further down where the filtering happens — the
+        # widget writes st.session_state["board_search"] either way, so the
+        # box can sit in the toolbar while its logic stays with the board.
+        st.text_input("Search entries", key="board_search",
+                      placeholder="Search entries…", label_visibility="collapsed")
     with ctl_c:
         # Only offered while there is nothing to lose: seeding refuses to mix
         # sample rows into real ones anyway. Sitting in the toolbar keeps the
@@ -889,16 +901,21 @@ with stage:
             demo.seed()
             _touch_data()
             st.rerun()
-    with ctl_bot:
-        bot_is_open = st.session_state.bot_open
-        if st.button("", key="toggle_bot", width="stretch",
-                     icon=":material/close:" if bot_is_open else ":material/smart_toy:",
-                     help="Close the finance bot" if bot_is_open else "Ask the finance bot"):
-            st.session_state.bot_open = not st.session_state.bot_open
-            st.rerun()
-    with ctl_set:
-        settings_open = st.button("", key="open_settings", width="stretch",
-                                  icon=":material/settings:", help="Settings")
+    with ctl_btns:
+        # Both in one container so they read as a pair. Streamlit stacks a
+        # column's children vertically; the stylesheet turns this one on its
+        # side and pins it to the right, which is the only way to control the
+        # space BETWEEN them — as two separate columns they were held apart by
+        # the row's own gap plus whatever each column had left over.
+        with st.container(key="ll_toolbar"):
+            bot_is_open = st.session_state.bot_open
+            if st.button("", key="toggle_bot",
+                         icon=":material/close:" if bot_is_open else ":material/smart_toy:",
+                         help="Close the finance bot" if bot_is_open else "Ask the finance bot"):
+                st.session_state.bot_open = not st.session_state.bot_open
+                st.rerun()
+            settings_open = st.button("", key="open_settings",
+                                      icon=":material/settings:", help="Settings")
 
     # ================================================================ board
     status_word = {"on-time": "On track", "delayed": "Running warm",
@@ -1023,11 +1040,7 @@ with stage:
     # remembered purchase means scanning every row. Matches detail and
     # platform, and reports what it did: a search returning nothing must not
     # look the same as a month with nothing in it.
-    sc1, sc2 = st.columns([3, 7])
-    with sc1:
-        query = st.text_input(
-            "Search entries", key="board_search", placeholder="Search entries…",
-            label_visibility="collapsed").strip()
+    query = (st.session_state.get("board_search") or "").strip()
 
     board_arrivals, board_departures = snap.arrivals, snap.departures
     if query:
@@ -1043,14 +1056,13 @@ with stage:
         found = len(board_arrivals) + len(board_departures)
         shown = finance.money(
             board_arrivals["amount"].sum() + board_departures["amount"].sum(), 0)
-        with sc2:
-            if found:
-                st.caption(f"{found} entr{'y' if found == 1 else 'ies'} matching "
-                           f"“{query}” — {shown} in total. Clear the box to see "
-                           f"the whole month.")
-            else:
-                st.caption(f"Nothing in {finance.month_label(snap.key)} matches "
-                           f"“{query}”. The month is not empty — the search is.")
+        if found:
+            st.caption(f"{found} entr{'y' if found == 1 else 'ies'} matching "
+                       f"“{query}” — {shown} in total. Clear the box to see "
+                       f"the whole month.")
+        else:
+            st.caption(f"Nothing in {finance.month_label(snap.key)} matches "
+                       f"“{query}”. The month is not empty — the search is.")
 
     # Both columns always render exactly pad_to row-slots — real rows, then an
     # overflow marker if the column has more than fit, then blank flaps to
