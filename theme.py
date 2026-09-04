@@ -1837,6 +1837,164 @@ div.st-key-clear_chat button {
 }
 [data-baseweb="modal"] [role="dialog"] code *,
 [data-testid="stDialog"] [role="dialog"] code * { color: var(--amber) !important; }
+
+/* ================================================ data grids follow the mode */
+/* st.dataframe and st.data_editor render through glide-data-grid, which paints
+   every cell from its own --gdg-* custom properties and reads nothing else in
+   this stylesheet. Streamlit fills those from config.toml's [theme] block,
+   which is pinned dark so the first paint never flashes light — so the ledger
+   and debt tables stayed black slabs on light mode's cream however the tokens
+   were set. Re-pointing them at the same tokens the rest of the board reads
+   makes the grid follow the mode from one rule, rather than needing a second
+   palette kept in sync by hand. */
+.stDataFrameGlideDataEditor {
+  --gdg-bg-cell: var(--panel) !important;
+  --gdg-bg-cell-medium: var(--panel-2) !important;
+  --gdg-bg-header: var(--panel-2) !important;
+  --gdg-bg-header-hovered: var(--panel-3) !important;
+  --gdg-bg-header-has-focus: var(--panel-3) !important;
+  --gdg-bg-group-header: var(--panel-2) !important;
+  --gdg-bg-group-header-hovered: var(--panel-3) !important;
+  --gdg-text-dark: var(--ink) !important;
+  --gdg-text-medium: var(--ink-2) !important;
+  --gdg-text-light: var(--ink-3) !important;
+  --gdg-text-header: var(--ink-2) !important;
+  --gdg-text-group-header: var(--ink-2) !important;
+  --gdg-text-header-selected: var(--ink) !important;
+  --gdg-text-bubble: var(--ink-2) !important;
+  --gdg-bg-bubble: var(--panel-2) !important;
+  --gdg-bg-bubble-selected: var(--panel-3) !important;
+  --gdg-border-color: var(--rule-2) !important;
+  --gdg-horizontal-border-color: var(--rule) !important;
+  --gdg-drilldown-border: var(--rule-2) !important;
+  --gdg-accent-color: var(--amber) !important;
+  --gdg-accent-light: var(--amber-12) !important;
+  /* Ink ON the accent fill, not beside it. --void is the mode's own background:
+     dark beneath dark mode's bright amber, pale beneath light mode's brown one,
+     so a single token gives the right contrast in both directions. */
+  --gdg-accent-fg: var(--void) !important;
+  --gdg-bg-search-result: var(--amber-24) !important;
+  --gdg-bg-icon-header: var(--ink-3) !important;
+  --gdg-fg-icon-header: var(--panel) !important;
+  --gdg-link-color: var(--amber) !important;
+  --gdg-resize-indicator-color: var(--amber) !important;
+  --gdg-font-family: var(--font-ui) !important;
+}
+/* The grid's own frame, which is DOM rather than canvas and so kept the
+   static config background behind the painted cells. */
+[data-testid="stDataFrame"] > div,
+[data-testid="stDataFrameResizable"] {
+  background: var(--panel) !important;
+  border-color: var(--rule-2) !important;
+}
+
+/* ============================================ the open dropdown, both modes */
+/* A closed selectbox was already themed. The OPEN list is a different element
+   in a different place: this build portals it to <body> as
+   stSelectboxVirtualDropdown, so it is outside every container selector above,
+   and it carries neither [data-baseweb="menu"] nor a [role="listbox"] wrapper
+   that the older rules were written against. Nothing matched it, so it fell
+   back to config.toml's pinned #07090C and hung as a black card off a cream
+   page. Tokens are declared on :root, so a portalled element still inherits
+   them — only the selector was missing. */
+[data-testid="stSelectboxVirtualDropdown"],
+[data-testid="stSelectboxVirtualDropdown"] > div,
+[data-testid="stSelectboxVirtualDropdown"] [role="listbox"] {
+  background: var(--panel-2) !important;
+  border-color: var(--rule-2) !important;
+  color: var(--ink) !important;
+}
+[data-testid="stSelectboxVirtualDropdown"] [role="option"] {
+  background: transparent !important;
+  color: var(--ink) !important;
+  font-family: var(--font-ui) !important;
+}
+[data-testid="stSelectboxVirtualDropdown"] [role="option"]:hover,
+[data-testid="stSelectboxVirtualDropdown"] [role="option"][aria-selected="true"] {
+  background: var(--panel-3) !important;
+  color: var(--ink) !important;
+}
+
+/* ==================================================== settings dialog rhythm */
+/* Every section in Settings is a heading, a caption and a control, and the
+   default vertical block gap treated all three as peers — so a label sat as
+   far from the thing it named as from the next section entirely, and the
+   dialog scrolled far longer than it had content for. Tightening the gap and
+   the rules pulls each group together and lets the dividers do the separating
+   they were already there to do. */
+[data-testid="stDialog"] [data-testid="stVerticalBlock"] {
+  gap: var(--s2) !important;
+}
+[data-testid="stDialog"] hr {
+  margin-top: var(--s3) !important;
+  margin-bottom: var(--s3) !important;
+}
+/* Deliberately NOT zeroing the paragraph margins inside these blocks. Doing
+   that collapsed each caption's element container to a single line's height
+   while the caption itself still wrapped to two — the container does not clip,
+   so the overflow printed straight over the widget underneath. The gap above
+   is the whole adjustment; the text keeps the box it needs. */
+
+/* ================================================ a composer that starts small */
+/* The field opened at the height of the buttons flanking it rather than the
+   height of one line of text, which is a lot of empty box to look at before
+   anything has been typed. The textarea already grows with its own content —
+   Streamlit drives that from scrollHeight — so the fix is only to stop the
+   row around it setting a floor: trim the shell's padding, shrink the two
+   controls to the line they sit on, and let the cap in the rule further up
+   decide when it starts scrolling instead. */
+/* Two wrappers deep, and the height came from the OUTER one: it carries 12px
+   top and bottom, which is 24px of the 58 an empty composer used to occupy
+   before a single character had been typed. The inner row only holds the two
+   26px controls. */
+[data-testid="stChatInput"] > div {
+  padding-top: 5px !important;
+  padding-bottom: 5px !important;
+}
+[data-testid="stChatInput"] > div > div {
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  align-items: flex-end !important;
+}
+[data-testid="stChatInput"] textarea {
+  min-height: 21px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+[data-testid="stChatInput"] button {
+  width: 26px !important; height: 26px !important;
+  min-width: 26px !important; min-height: 26px !important;
+  padding: 0 !important;
+}
+[data-testid="stChatInput"] button svg { width: 15px !important; height: 15px !important; }
+
+/* ============================================== the two chrome controls */
+/* Icon-only, so the button should be the size of its glyph rather than the
+   width of a column that no longer has a label to hold. margin-left:auto pins
+   each to the right edge of its own slot, which keeps the pair tight against
+   the board's right margin at any container width instead of drifting apart as
+   the column grows. */
+.st-key-toggle_bot button,
+.st-key-open_settings button {
+  width: 38px !important;
+  min-width: 38px !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin-left: auto !important;
+}
+.st-key-toggle_bot button > div,
+.st-key-open_settings button > div { gap: 0 !important; }
+/* The row these sit in used to carry two labelled buttons and was spaced like
+   a section of its own. As a pair of marks in the corner it is chrome, so the
+   band above and below it closes up and the board starts higher — which is the
+   whole point of moving them out of the top-left. Selector spelled out to the
+   exact child chain: a looser :has() also matches the outer stage/rail row,
+   which would drag the entire board up by the same amount. */
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]
+    > [data-testid="stVerticalBlock"] > .st-key-toggle_bot) {
+  margin-top: calc(var(--s4) * -1) !important;
+  margin-bottom: calc(var(--s3) * -1) !important;
+}
 """
 
 

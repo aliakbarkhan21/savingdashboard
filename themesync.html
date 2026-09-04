@@ -1,0 +1,74 @@
+<!-- Keeps Streamlit's OWN active theme in step with this board's light/dark
+     toggle.
+
+     Almost everything here is themed by theme.py, which redeclares its tokens
+     per mode — so a toggle is just a different :root block and nothing else
+     needs to know. Two widgets are out of reach that way: st.dataframe and
+     st.data_editor paint their cells to a <canvas> through glide-data-grid,
+     from a JavaScript theme object Streamlit builds out of config.toml. CSS
+     cannot repaint a canvas, which is why the ledger and debt tables stayed
+     black slabs on light mode's cream no matter how many selectors were aimed
+     at them — including a full set of --gdg-* overrides, which the computed
+     styles accepted and the canvas ignored.
+
+     config.toml now carries both a [theme.light] and a [theme.dark]. Streamlit
+     chooses between them from the viewer's active theme, which it keeps in
+     localStorage and reads once at boot. Setting that key to match the board's
+     own mode gets the canvas widgets repainted by Streamlit itself, in the
+     right palette, instead of being argued with afterwards.
+
+     Delivered through components.v1.html rather than st.iframe because the mode
+     is substituted into the markup below: an iframe whose src never changes is
+     not re-executed on a rerun, so the toggle moved every colour on the page
+     except the two this exists to fix. Different markup per mode is what makes
+     the script run again.
+
+     The reload is the price of that boot-time read, and it is guarded: it fires
+     only on a real mismatch, so once when the mode actually changes and never
+     on an ordinary rerun. Without the guard it would reload forever. -->
+<script>
+(function () {
+  var want = "__LL_MODE__";
+  var parentWin;
+  try { parentWin = window.parent; } catch (e) { return; }
+  if (!parentWin || parentWin === window) { return; }
+
+  try {
+    // The key is namespaced by the app's base path ("stActiveTheme-/-v2" at the
+    // root) and carries Streamlit's own version suffix. Discovered rather than
+    // hardcoded so it keeps matching if either changes; the literal is only a
+    // fallback for the first visit, before anything has been written.
+    var store = parentWin.localStorage;
+    var key = "stActiveTheme-/-v2";
+    for (var i = 0; i < store.length; i++) {
+      var k = store.key(i);
+      if (k && k.indexOf("stActiveTheme") === 0) { key = k; break; }
+    }
+
+    var current = null;
+    try { current = JSON.parse(store.getItem(key)); } catch (e) { current = null; }
+    if (current === want) { return; }
+
+    store.setItem(key, JSON.stringify(want));
+
+    // First visit: nothing was stored, so Streamlit has just booted on "System"
+    // and resolved the palette from the OS. If that already agrees with the mode
+    // the board is rendering, the canvas widgets are correct and reloading would
+    // only make a new visitor watch the page load twice — which on the public
+    // demo link is the first thing they would see. Only a genuine disagreement
+    // is worth the round trip.
+    if (current === null || current === "System") {
+      var osWants = parentWin.matchMedia
+        && parentWin.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "Dark" : "Light";
+      if (osWants === want) { return; }
+    }
+
+    parentWin.location.reload();
+  } catch (e) {
+    // Storage can be unavailable — a private window, blocked site data. The
+    // board is fully themed without this; only the two canvas widgets would
+    // keep the other palette, which is not worth throwing for.
+  }
+})();
+</script>
