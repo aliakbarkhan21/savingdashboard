@@ -28,6 +28,7 @@ from html import escape as esc
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import access
 import bot
@@ -82,6 +83,20 @@ if "theme_mode" not in st.session_state:
     _qp_theme = st.query_params.get("theme")
     st.session_state.theme_mode = _qp_theme if _qp_theme in ("light", "dark") else "dark"
 IS_DARK = st.session_state.theme_mode == "dark"
+
+
+# Streamlit's own active theme, kept in step with the toggle above. Only the
+# canvas-painted table widgets need this — see themesync.html for why no amount
+# of CSS reaches them. The mode is substituted into the markup so the component
+# actually re-runs when it changes; an unchanged iframe src does not.
+@st.cache_resource
+def _themesync_template() -> str:
+    return (pathlib.Path(__file__).parent / "themesync.html").read_text(encoding="utf-8")
+
+
+components.html(
+    _themesync_template().replace("__LL_MODE__", "Dark" if IS_DARK else "Light"),
+    height=0)
 
 # The direction contract, in the emitted markup so it can be audited at runtime.
 st.markdown(
@@ -857,14 +872,14 @@ with stage:
     # re-indented to move it up.
     ledgers_menu = st.expander("Ledgers, debts and import")
 
-    ctl_a, ctl_b, ctl_c, _ = st.columns([1.5, 1.2, 1.7, 5.6])
-    with ctl_a:
-        if st.button("Close bot" if st.session_state.bot_open else "Finance bot",
-                     key="toggle_bot", width="stretch"):
-            st.session_state.bot_open = not st.session_state.bot_open
-            st.rerun()
-    with ctl_b:
-        settings_open = st.button("Settings", key="open_settings", width="stretch")
+    # The two controls sit hard right, as icons. They are chrome — always
+    # present, rarely the reason anyone came — so they read better as a pair of
+    # marks in the corner than as two labelled buttons holding the top-left,
+    # which is where the eye lands first and belongs to the board. The empty
+    # column carries the width; the buttons are last so they end up at the far
+    # edge, and each keeps its name in a tooltip since the glyph is now the
+    # only label.
+    _, ctl_c, ctl_bot, ctl_set = st.columns([9.0, 1.9, 0.45, 0.45])
     with ctl_c:
         # Only offered while there is nothing to lose: seeding refuses to mix
         # sample rows into real ones anyway. Sitting in the toolbar keeps the
@@ -874,6 +889,16 @@ with stage:
             demo.seed()
             _touch_data()
             st.rerun()
+    with ctl_bot:
+        bot_is_open = st.session_state.bot_open
+        if st.button("", key="toggle_bot", width="stretch",
+                     icon=":material/close:" if bot_is_open else ":material/smart_toy:",
+                     help="Close the finance bot" if bot_is_open else "Ask the finance bot"):
+            st.session_state.bot_open = not st.session_state.bot_open
+            st.rerun()
+    with ctl_set:
+        settings_open = st.button("", key="open_settings", width="stretch",
+                                  icon=":material/settings:", help="Settings")
 
     # ================================================================ board
     status_word = {"on-time": "On track", "delayed": "Running warm",

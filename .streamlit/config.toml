@@ -14,12 +14,29 @@ enableStaticServing = true
 # debugged, so the developer toolbar and its shortcuts are switched off.
 toolbarMode = "viewer"
 
-# The Departure Board world is a dark enamel panel. Committing the theme here
+# The Departure Board world is a dark enamel panel, and committing that here
 # stops Streamlit's own light default from fighting the stylesheet on first paint.
+#
+# Split into [theme.light] and [theme.dark] because two widgets cannot be themed
+# by CSS at all: st.dataframe and st.data_editor paint their cells to a <canvas>
+# from a JavaScript theme Streamlit builds out of THIS file. With one pinned
+# palette here, every ledger and debt table stayed a black slab in light mode
+# whatever the stylesheet said. Streamlit picks between the two blocks from the
+# viewer's active theme, which themesync.html keeps in step with the board's own
+# light/dark toggle. These values mirror the tokens in theme.py — background is
+# the panel colour rather than the page void, since it is grid cells it lands on.
 [theme]
 base = "dark"
+font = "sans serif"
+
+[theme.dark]
 primaryColor = "#FFB300"
 backgroundColor = "#07090C"
 secondaryBackgroundColor = "#0E1116"
 textColor = "#E9EDF2"
-font = "sans serif"
+
+[theme.light]
+primaryColor = "#A85D00"
+backgroundColor = "#FBF8F0"
+secondaryBackgroundColor = "#F3EDE0"
+textColor = "#1A1712"

@@ -163,6 +163,7 @@ right default on a laptop nothing can reach.
 | `rates.py` | Daily FX rates, cached in `meta`, with an offline fallback. |
 | `demo.py` | Labelled sample data. |
 | `access.py` | Who may open the board, and which instance shows real records. |
+| `themesync.html` | Keeps Streamlit's own theme in step with the toggle, for the canvas-painted tables. |
 | `DESIGN.md` | The design system, recorded from the built result. |
 | `PRODUCT.md` | Product truth: users, constraints, principles. |
 
