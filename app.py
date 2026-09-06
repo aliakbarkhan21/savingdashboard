@@ -1264,7 +1264,10 @@ with stage:
         show_trend = len(trend_keys) > 1 and not snap.by_category.empty
         trend_cats = finance.category_series(frames, trend_keys) if show_trend else {}
 
-        load = ['<div class="ll-panel">']
+        # ll-panel-fill: this panel shares a row with a taller column, and a
+        # short month (two categories, say) left a dead band under it. The
+        # class is what the stretch rules in theme.py hang off.
+        load = ['<div class="ll-panel ll-panel-fill">']
         if show_trend:
             load += ['<input type="checkbox" id="ll-view" class="ll-vr">']
         load += ['<div class="ll-panel-head">',

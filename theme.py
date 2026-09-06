@@ -100,7 +100,7 @@ def chart_sequence(names) -> list:
     return [platform_color(n) for n in names]
 
 
-def donut_svg(records, total, center_label="", size=132, thickness=18, amount_fmt=None):
+def donut_svg(records, total, center_label="", size=168, thickness=22, amount_fmt=None):
     """Inline SVG donut for spending-by-platform.
 
     Styled to match the board rather than a chart library's default: a
@@ -138,10 +138,14 @@ def donut_svg(records, total, center_label="", size=132, thickness=18, amount_fm
 
     track = (f'<circle cx="{cx}" cy="{cy}" r="{radius:.2f}" fill="none" '
              f'style="stroke:rgba(var(--ink-rgb),0.09)" stroke-width="{thickness}"/>')
+    # Placed off the radius rather than at fixed offsets, so the centre stack
+    # stays put if the donut is ever drawn at another size. The old +/-3 and +15
+    # were tuned by eye against a 132px ring and drifted the moment it grew.
     center = (
-        f'<text x="{cx}" y="{cy - 3:.2f}" text-anchor="middle" class="ll-donut-total">'
-        f'{esc(center_label)}</text>'
-        f'<text x="{cx}" y="{cy + 15:.2f}" text-anchor="middle" class="ll-donut-label">spent</text>'
+        f'<text x="{cx}" y="{cy + size * 0.005:.2f}" text-anchor="middle" '
+        f'class="ll-donut-total">{esc(center_label)}</text>'
+        f'<text x="{cx}" y="{cy + size * 0.115:.2f}" text-anchor="middle" '
+        f'class="ll-donut-label">spent</text>'
     ) if center_label else ""
 
     return (f'<svg class="ll-donut" width="{size}" height="{size}" '
@@ -938,16 +942,19 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 .ll-panel-body { padding: var(--s4); }
 
 /* ---- platform load: spending by category as a stacked rail ---- */
-.ll-load { display: flex; align-items: center; gap: var(--s5); }
+/* The ring is the panel's headline and the list is its detail, so the ring
+   gets the room. align-items:center keeps them optically related when the list
+   is short — two categories should not leave a tall ring stranded at the top. */
+.ll-load { display: flex; align-items: center; gap: var(--s4); }
 .ll-donut-wrap { flex: 0 0 auto; }
 .ll-donut circle { transition: opacity 140ms var(--ease); }
 .ll-donut:hover circle:not(:hover) { opacity: 0.55; }
 .ll-donut-total {
-  font-family: var(--font-board); font-size: 1.05rem; font-weight: 700;
+  font-family: var(--font-board); font-size: var(--t-h2); font-weight: 700;
   fill: var(--ink); letter-spacing: 0.01em;
 }
 .ll-donut-label {
-  font-family: var(--font-ui); font-size: 0.5625rem; font-weight: 600;
+  font-family: var(--font-ui); font-size: var(--t-micro); font-weight: 600;
   letter-spacing: 0.14em; text-transform: uppercase; fill: var(--ink-3);
 }
 .ll-load-list { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0; }
@@ -957,8 +964,8 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 }
 .ll-load-row:last-child .ll-load-item { border-bottom: none; }
 .ll-load-name { font-size: var(--t-small); color: var(--ink); font-weight: 500; }
-.ll-load-pct { font-size: var(--t-micro); color: var(--ink-3); font-weight: 600; min-width: 38px; text-align: right; }
-.ll-load-amt { font-size: var(--t-small); color: var(--ink-2); font-weight: 600; min-width: 78px; text-align: right; }
+.ll-load-pct { font-size: var(--t-micro); color: var(--ink-3); font-weight: 600; min-width: 32px; text-align: right; }
+.ll-load-amt { font-size: var(--t-small); color: var(--ink-2); font-weight: 600; min-width: 68px; text-align: right; }
 
 /* ---- per-category budget cap: a thin meter under any category that has one
    set, reusing the Capacity panel's own tone thresholds ---- */
@@ -1081,6 +1088,43 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 @container board (max-width: 720px) {
   .ll-trend-row { grid-template-columns: 30px minmax(0,1fr) auto auto; }
   .ll-trend-row .ll-spark { display: none; }
+}
+
+/* ---- a panel that fills its column ------------------------------------
+   Streamlit columns already stretch to the tallest of them; what does not
+   stretch is the chain between the column and the panel, which is five divs of
+   auto height. So the Platform load panel sat at its content height and left a
+   dead band under it whenever the column beside it ran taller — which is any
+   month with only two or three categories in it.
+
+   Keyed off .ll-panel-fill rather than a positional selector, because a chain
+   of :has(> div > div) anchored on nothing is exactly the kind of rule that
+   silently stops matching on a Streamlit upgrade. One class, one anchor.
+
+   The emotion wrapper in the middle centres its child, which would float the
+   panel in the space instead of filling it; that one is put back to stretch. */
+[data-testid="stElementContainer"]:has(.ll-panel-fill) {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+[data-testid="stElementContainer"]:has(.ll-panel-fill) [data-testid="stMarkdown"],
+[data-testid="stElementContainer"]:has(.ll-panel-fill) [data-testid="stMarkdown"] > div,
+[data-testid="stElementContainer"]:has(.ll-panel-fill) [data-testid="stMarkdownContainer"] {
+  height: 100% !important;
+  align-items: stretch !important;
+}
+.ll-panel-fill {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+/* The body takes the slack, so the ring and its list sit in the middle of the
+   space rather than clinging to the header. */
+.ll-panel-fill .ll-panel-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* ---- utilisation meter ---- */
@@ -1726,15 +1770,35 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 [data-testid="stChatInput"] textarea:focus {
   outline: none !important; box-shadow: none !important;
 }
-/* The wrapper immediately around the field is a flex item in a column, so it
-   grew to swallow every spare pixel of that column — an empty one-row field
-   was being stretched to 177px. A fixed basis makes it take only the row it
-   needs, and Streamlit's own auto-grow (which already works correctly once
-   text exists) still drives the height from there. */
-[data-testid="stChatInput"] > div > div > div:first-child {
-  flex: 0 0 auto !important;
-  height: auto !important;
-  min-height: 0 !important;
+/* An empty composer must be one row tall, and the thing that kept inflating it
+   is the placeholder.
+   
+   The textarea's row sizes to the textarea's content height, and for an empty
+   field the content IS the placeholder — so as soon as "Message the bot" wraps,
+   the empty box grows to two or three rows. It wrapped for two reasons, and
+   both had to go:
+   
+     - a genuinely narrow rail, where 106px of field cannot hold the phrase;
+     - the font swap, which is why the same window width gave 42px on one load
+       and 97px on the next. Barlow loads with font-display:swap, so the first
+       layout is measured in the wider fallback face; the placeholder wraps,
+       the row takes that height, and when Barlow arrives nothing re-measures.
+       Typing a character and deleting it snapped the box back to one row,
+       which is what gave the race away.
+   
+   Stopping the placeholder from wrapping fixes both at once, and touches only
+   the empty state: typed text still wraps and still auto-grows to the 7.5em
+   cap. Verified 640px-1600px, empty and with four lines in it.
+   
+   Note what does NOT work here: out-specifying the row's flex. Streamlit ships
+   its own `> div > div > div:first-child:has(> [data-testid="stChatInputTextArea"])
+   { flex: 1 1 auto }`, which beats any plainer version of that chain — and it
+   is right to, because the row growing with content is the behaviour we want.
+   The bug was never the flex; it was what the row was measuring. */
+[data-testid="stChatInputTextArea"]::placeholder {
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  overflow: hidden !important;
 }
 [data-testid="stChatInput"] textarea { max-height: 7.5em !important; }
 [data-testid="stChatInput"] textarea::placeholder { color: var(--ink-3) !important; opacity: 1 !important; }

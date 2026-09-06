@@ -339,6 +339,14 @@ Two labels over one hidden checkbox, used for the Platform Load panel's Share / 
 
 Radios would be the obvious way to get that and they do not work: a radio hidden with `display: none` is never activated by a click on its label. Measured — flipping the very same element's `type` to `checkbox` and clicking the same label checked it, with the label/control association identical either way.
 
+### The Composer
+An empty chat input must be one row tall. Its row sizes to the textarea's content, and for an empty field the content is the **placeholder** — so the moment "Message the bot" wraps, the empty box grows to two or three rows. The placeholder is therefore held to one line (`::placeholder { white-space: nowrap; text-overflow: ellipsis }`), which touches only the empty state; typed text still wraps and auto-grows to the 7.5em cap.
+
+Two things made it wrap: a genuinely narrow rail, and the font swap. Barlow loads with `font-display: swap`, so the first layout is measured in the wider fallback face — which is why the same window width gave 42px on one load and 97px on the next, and why typing a character and deleting it snapped it back. Do not try to fix this by out-specifying the row's flex: Streamlit ships its own `:has(> [data-testid="stChatInputTextArea"]) { flex: 1 1 auto }`, and that rule is correct — growing with content is wanted. The bug was what the row was measuring.
+
+### Panel Fill
+Streamlit columns stretch to the tallest of them; the five divs between a column and a panel do not. A panel that should fill its column takes `.ll-panel-fill`, and the stretch rules hang off that class rather than off a positional `:has(> div > div)` chain — a chain anchored on nothing is what silently stops matching on an upgrade. The emotion wrapper in the middle of that chain centres its child, so it is put back to `stretch`.
+
 ### Sparkline
 `theme.trend_svg` — a polyline over a 15%-opacity area fill in the category's own hue, last point marked, 104×26. Each line is scaled to **its own peak**, not a shared one: the question is whether a category is rising against its own past, and a shared scale would answer a different question while flattening every small category into a straight line. The amount beside each row is what makes categories comparable.
 
