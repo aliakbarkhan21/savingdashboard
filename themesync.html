@@ -38,19 +38,12 @@
 (function () {
   var MODE = "__LL_MODE__";                     // "Dark" or "Light"
 
-  // Mirrors [theme.dark] / [theme.light] in config.toml, which in turn mirror
-  // the tokens in theme.py. backgroundColor is the PANEL colour rather than the
-  // page void: what it actually lands on is grid cells.
-  var THEMES = {
-    Dark: {
-      base: "dark", primaryColor: "#FFB300", backgroundColor: "#07090C",
-      secondaryBackgroundColor: "#0E1116", textColor: "#E9EDF2", font: "sans serif"
-    },
-    Light: {
-      base: "light", primaryColor: "#A85D00", backgroundColor: "#FBF8F0",
-      secondaryBackgroundColor: "#F3EDE0", textColor: "#1A1712", font: "sans serif"
-    }
-  };
+  // Substituted in from theme.STREAMLIT_THEME rather than written out here.
+  // This block used to be a hand-kept third copy of the palette, alongside
+  // theme.py and config.toml; it drifted the moment a field was added.
+  // backgroundColor is the PANEL colour rather than the page void, since what
+  // it actually lands on is grid cells.
+  var THEMES = __LL_THEMES__;
 
   var parentWin;
   try { parentWin = window.parent; } catch (e) { return; }

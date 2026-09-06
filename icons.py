@@ -30,6 +30,10 @@ _PATHS = {
                   '<path d="M6 15H3.75"/><path d="M20.25 15H18"/>'
                   '<path d="M9 7.5h6l2.25 3.25H6.75L9 7.5Z"/>'),
     "receivable": '<path d="M12 20V7"/><path d="m7 12 5-5 5 5"/><path d="M4 4h16"/>',
+    # Net worth is a balance: what is owed to you on one pan, what you owe on
+    # the other, and the beam reads whichever way the difference falls.
+    "scales": ('<path d="M12 4.5v15"/><path d="M6 19.5h12"/><path d="M4 8h16"/>'
+               '<path d="M4 8 1.75 13h4.5L4 8Z"/><path d="M20 8l-2.25 5h4.5L20 8Z"/>'),
     "payable": '<path d="M12 4v13"/><path d="m7 12 5 5 5-5"/><path d="M4 20h16"/>',
 
     # --- actions ----------------------------------------------------------

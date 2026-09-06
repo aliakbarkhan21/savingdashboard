@@ -94,8 +94,15 @@ def _themesync_template() -> str:
     return (pathlib.Path(__file__).parent / "themesync.html").read_text(encoding="utf-8")
 
 
+@st.cache_resource
+def _palette_template() -> str:
+    return (pathlib.Path(__file__).parent / "palette.html").read_text(encoding="utf-8")
+
+
 components.html(
-    _themesync_template().replace("__LL_MODE__", "Dark" if IS_DARK else "Light"),
+    _themesync_template()
+    .replace("__LL_THEMES__", json.dumps(theme.STREAMLIT_THEME))
+    .replace("__LL_MODE__", "Dark" if IS_DARK else "Light"),
     height=0)
 
 # The direction contract, in the emitted markup so it can be audited at runtime.
@@ -686,7 +693,11 @@ with st.sidebar:
         "rgba(var(--ink-rgb),0.62) calc(var(--fill,0%) - 2px),"
         "rgba(var(--ink-rgb),0.62) var(--fill,0%),"
         "rgba(var(--ink-rgb),0.045) var(--fill,0%)) !important;"
-        "border:1px solid transparent !important;border-radius:2px !important;"
+        "border:1px solid transparent !important;"
+        # The rail is a bar chart before it is a button: it takes the small
+        # radius rather than the chrome one, and none of the button skin's
+        # resting shadow, which would read as 10 stacked cards.
+        "border-radius:var(--radius-sm) !important;box-shadow:none !important;"
         "min-height:32px !important;justify-content:flex-start !important;"
         "font-family:var(--font-board) !important;letter-spacing:0.07em !important;"
         "text-transform:uppercase !important;color:var(--ink-2) !important;}",
@@ -1174,15 +1185,98 @@ with stage:
     # takes no space on the page.
     st.iframe(pathlib.Path(__file__).parent / "bridge.html", height=1)
 
+    # ---- command palette -------------------------------------------------
+    # Ctrl/Cmd+K. Same bargain as the click bridge above: one real Streamlit
+    # button per destination, parked off-screen, and a script that clicks the
+    # right one. Nothing here writes state directly.
+    #
+    # This is also the only route to an older month. The sidebar rail draws the
+    # ten most recent, so on a board with more history than that the rest had
+    # no way in at all — these buttons exist for EVERY month, not just the ten.
+    palette_items = []
+    for key in sorted(series, reverse=True):
+        if st.button("jump", key=f"jump_{key.replace('-', '_')}"):
+            st.session_state.period = key
+            st.rerun()
+        palette_items.append({
+            "section": "Months",
+            "label": finance.month_label(key),
+            "hint": f"{CURRENCY_SYMBOL} {finance.money_compact(series[key].outflow)}",
+            "key": f"jump_{key.replace('-', '_')}",
+            "here": key == st.session_state.period,
+        })
+    if st.button("jump", key="jump_all"):
+        st.session_state.period = finance.ALL_TIME
+        st.rerun()
+    palette_items.append({
+        "section": "Months", "label": "All Time", "hint": "every month",
+        "key": "jump_all", "here": st.session_state.period == finance.ALL_TIME,
+    })
+
+    # Filtering the board by platform. These drive the search box that is
+    # already on the toolbar rather than introducing a second filter with its
+    # own rules — so the result, and the caption under it, are the ones the
+    # board would have shown anyway. Search is scoped to the open month, and
+    # these are too; the caption says so when nothing matches.
+    for platform in db.CATEGORIES:
+        palette_items.append({
+            "section": f"Filter {snap.label}",
+            "label": platform, "hint": "filter the board",
+            "fill": platform,
+        })
+    palette_items.append({
+        "section": f"Filter {snap.label}", "label": "Clear the filter",
+        "hint": "show the whole month", "fill": "",
+    })
+
+    # These three already exist as real controls elsewhere on the page, so the
+    # palette points at them rather than growing duplicates of its own.
+    palette_items += [
+        {"section": "Actions", "label": "Settings",
+         "hint": "budgets, currency, backup", "key": "open_settings"},
+        {"section": "Actions",
+         "label": "Close the Finance Bot" if st.session_state.bot_open
+                  else "Open the Finance Bot",
+         "hint": "ask, or log by sentence", "key": "toggle_bot"},
+        {"section": "Actions",
+         "label": "Switch to light mode" if IS_DARK else "Switch to dark mode",
+         "hint": "", "key": "toggle_theme"},
+    ]
+
+    # st.iframe takes an HTML string as well as a path, which is what lets the
+    # payload be substituted in without falling back to the deprecated
+    # st.components.v1.html the way themesync.html still has to.
+    st.iframe(
+        _palette_template()
+        .replace("__LL_PALETTE__", json.dumps({"items": palette_items})),
+        height=1)
+
     # ============================================================== panels
     spacer(4)
     p1, p2 = st.columns([1.35, 1], gap="medium")
 
     with p1:
-        load = ['<div class="ll-panel"><div class="ll-panel-head">',
-                f'<div class="ll-panel-title">{icons.icon("platform", 15)}Platform load</div>',
-                f'<div class="ll-col-sum">{finance.money(snap.outflow, 0)}</div>',
-                '</div><div class="ll-panel-body">']
+        # The board could say where this month's money went and never whether
+        # that was more or less than usual — every view is scoped to one period.
+        # The trend view answers "is this category rising", against the same
+        # twelve months the run strip below is already showing.
+        trend_keys = sorted(series)[-12:]
+        show_trend = len(trend_keys) > 1 and not snap.by_category.empty
+        trend_cats = finance.category_series(frames, trend_keys) if show_trend else {}
+
+        load = ['<div class="ll-panel">']
+        if show_trend:
+            load += ['<input type="checkbox" id="ll-view" class="ll-vr">']
+        load += ['<div class="ll-panel-head">',
+                 f'<div class="ll-panel-title">{icons.icon("platform", 15)}'
+                 'Platform load</div>',
+                 '<div class="ll-panel-tools">']
+        if show_trend:
+            load += ['<div class="ll-seg">'
+                     '<label class="seg-share" for="ll-view">Share</label>'
+                     '<label class="seg-trend" for="ll-view">Trend</label></div>']
+        load += [f'<div class="ll-col-sum">{finance.money(snap.outflow, 0)}</div>',
+                 '</div></div><div class="ll-panel-body">']
         if snap.by_category.empty:
             load += ['<div class="ll-empty">', icons.icon("platform", 26),
                      '<div class="ll-empty-title">No departures yet</div>',
@@ -1234,6 +1328,60 @@ with stage:
                         f'{finance.money(budget_cap, 0)} cap</div></div>')
                 load.append('</div>')
             load.append('</div></div>')
+
+            if show_trend:
+                # Ordered by what the month actually spent, so the two views
+                # list the same categories in the same order and switching
+                # between them does not reshuffle the page.
+                order = [str(r["category"]) for r in snap.by_category.to_dict("records")]
+                order += [c for c in sorted(trend_cats) if c not in order]
+                window = (f'{finance.month_short(trend_keys[0])} {trend_keys[0][2:4]}'
+                          f' – {finance.month_short(trend_keys[-1])} '
+                          f'{trend_keys[-1][2:4]}')
+                load.append('<div class="ll-trend">')
+                for category in order:
+                    vals = trend_cats.get(category)
+                    if not vals:
+                        continue
+                    latest = vals[-1]
+                    prior = vals[:-1]
+                    base = sum(prior) / len(prior) if prior else 0.0
+                    # Against the category's own average over the window, not
+                    # against last month alone: one quiet month should not read
+                    # as a collapse, and one big month should not read as a
+                    # trend. A category with no prior spend is new, which is a
+                    # different fact from a percentage.
+                    if base <= 0:
+                        tone, delta = ("new", "new") if latest > 0 else ("flat", "&mdash;")
+                    else:
+                        pct = (latest - base) / base * 100.0
+                        if abs(pct) < 1:
+                            tone, delta = "flat", "0%"
+                        elif pct > 0:
+                            tone, delta = "up", f"+{pct:.0f}%"
+                        else:
+                            tone, delta = "down", f"{pct:.0f}%"
+                    colour = theme.platform_color(category)
+                    spark = theme.trend_svg(
+                        vals, colour,
+                        label=f"{category}: {window}, "
+                              f"peak {finance.money(max(vals), 0)}")
+                    load.append(
+                        f'<div class="ll-trend-row">'
+                        f'<div class="ll-plat" style="background:{colour}">'
+                        f'{theme.platform_code(category)}</div>'
+                        f'<div class="ll-trend-name">{esc(category)}</div>'
+                        f'{spark}'
+                        f'<div class="ll-trend-amt">{finance.money(latest, 0)}</div>'
+                        f'<div class="ll-trend-delta {tone}">{delta}</div>'
+                        f'</div>')
+                load.append(
+                    f'<div class="ll-trend-foot">{esc(window)} &middot; each line is '
+                    'scaled to its own peak, so the shapes compare a category '
+                    'with its own past rather than with each other. The change '
+                    'is the latest month against that category&rsquo;s average '
+                    'over the window.</div>')
+                load.append('</div>')
         load += ['</div></div>']
         html(*load)
 
@@ -1289,6 +1437,14 @@ with stage:
              f'<div class="ll-oblig-label">{icons.icon("payable", 13)}You owe</div>',
              f'<div class="ll-oblig-value">{finance.money(snap.payable_open, 0)}</div>',
              f'<div class="ll-oblig-note">{snap.payable_count} unsettled</div></div>',
+             # Cash on hand is what you can spend; net worth is what you are
+             # actually worth once the two columns above are settled. Both are
+             # true and they are different questions, so both get said.
+             f'<div class="ll-oblig-cell is-total'
+             f'{" is-neg" if snap.net_worth < 0 else ""}">',
+             f'<div class="ll-oblig-label">{icons.icon("scales", 13)}Net worth</div>',
+             f'<div class="ll-oblig-value">{finance.money(snap.net_worth, 0)}</div>',
+             '<div class="ll-oblig-note">cash + owed to you &minus; you owe</div></div>',
              '</div></div>')
 
     # ---- the run strip -----------------------------------------------------

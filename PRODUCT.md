@@ -121,6 +121,26 @@ spending category in charts — a known duplication in the current model.
 **Monthly dashboards:** every view is scoped to a `YYYY-MM` key, plus an All Time
 rollup. Debts can optionally ignore the month filter, since they carry across months.
 
+**Reading across months.** Month-scoping answered "where did this month's money go" and
+could not answer "is my Food spending rising", which is the more useful question and the
+one a spreadsheet answers badly. The Platform Load panel now switches between **Share**
+(the donut) and **Trend** (a 12-month sparkline per category, with the latest month set
+against that category's own average over the window). Both read `finance._category_totals`,
+so the donut and the trend can never disagree — that shared helper is the point of the
+refactor, not a tidiness exercise. The switch is a pure-CSS checkbox: no rerun.
+
+**Net worth is on the board.** `Snapshot.net_worth` had existed since the obligations panel
+shipped and only the bot could see it — the two figures it is made of sat side by side on
+screen and the total was nowhere. It is now the panel's third cell.
+
+**Command palette (Ctrl/Cmd+K).** Jump to any month, filter the board by platform, open
+Settings or the bot. This also closes a real hole: the sidebar rail renders only the ten
+most recent months, so on a board with more history than that the older months had no
+route to them at all. Every month gets a palette entry and an off-screen button; the
+palette clicks it rather than writing state itself, so a choice is an ordinary widget
+interaction. Filters drive the toolbar's existing search box rather than adding a second
+filter with different rules.
+
 **Confirmed logic to repair in this cycle** (all four named by the user):
 - Savings and debt math, including how paid-back loans move cash and how opening
   balances behave.

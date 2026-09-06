@@ -1,0 +1,278 @@
+<!-- Ctrl/Cmd+K: jump anywhere on the board from the keyboard.
+
+     This exists as much for navigation as for speed. The sidebar rail only
+     renders the ten most recent months, so before this there was no route to an
+     older one at all — the board could hold a year of history with eight months
+     of it unreachable. Every month gets an entry here, and an off-screen
+     Streamlit button (st-key-jump_*) to land on.
+
+     Two things about how it is loaded, both learned the hard way elsewhere in
+     this app:
+
+       - The script is injected into the PARENT document rather than run in this
+         frame. A listener registered from inside an iframe dies with its frame,
+         and Streamlit rebuilds this frame on every rerun — the keypress would
+         still fire, into a closure whose realm no longer exists, so the palette
+         would open exactly once per rerun and then go silent. Running in the
+         parent's realm, the listener outlives every rerun. themesync.html
+         reaches the parent for a different reason and by the same route.
+
+       - Selecting an item clicks a real, off-screen Streamlit button rather
+         than trying to set state directly. That makes a palette choice an
+         ordinary widget interaction — one rerun, no page load — which is the
+         same bargain bridge.html strikes for clicking a board row.
+
+     The payload is substituted in from Python on every render, so the month
+     list and the active period stay current; the listener and the overlay are
+     built once and then only have their data refreshed. -->
+<script>
+(function () {
+  var PAYLOAD = __LL_PALETTE__;
+
+  var parentWin;
+  try { parentWin = window.parent; } catch (e) { return; }
+  if (!parentWin || parentWin === window) { return; }
+
+  var doc;
+  try { doc = parentWin.document; } catch (e) { return; }
+
+  // Hand the data over first. If the machinery is already installed from an
+  // earlier rerun this is the whole update: same listener, same overlay, fresh
+  // items.
+  try { parentWin.__llPaletteData = PAYLOAD; } catch (e) { return; }
+  try { if (parentWin.__llPaletteReady) { return; } } catch (e) { return; }
+
+  var install = function () {
+    if (window.__llPaletteReady) { return; }
+    window.__llPaletteReady = true;
+
+    var d = window.document;
+
+    var css = d.createElement("style");
+    css.textContent = [
+      // Tokens come from the board's own stylesheet, which is injected into
+      // this same document -- so the palette themes itself and needs no copy
+      // of the palette values.
+      ".ll-pal-back{position:fixed;inset:0;z-index:2147483000;",
+      "background:rgba(var(--void-rgb),0.55);backdrop-filter:blur(3px);",
+      "display:flex;align-items:flex-start;justify-content:center;",
+      "padding-top:12vh;opacity:0;transition:opacity 120ms ease}",
+      ".ll-pal-back.is-open{opacity:1}",
+      ".ll-pal{width:min(92vw,560px);max-height:64vh;display:flex;",
+      "flex-direction:column;background:var(--panel);color:var(--ink);",
+      "border:1px solid var(--rule-2);border-radius:var(--radius-lg);",
+      "box-shadow:var(--lift-3);overflow:hidden;",
+      "font-family:var(--font-ui);transform:translateY(-6px);",
+      "transition:transform 140ms var(--ease)}",
+      ".ll-pal-back.is-open .ll-pal{transform:none}",
+      ".ll-pal-in{width:100%;box-sizing:border-box;border:none;outline:none;",
+      "background:transparent;color:var(--ink);font-family:var(--font-ui);",
+      "font-size:var(--t-body);padding:15px 18px;",
+      "border-bottom:1px solid var(--rule)}",
+      ".ll-pal-in::placeholder{color:var(--ink-3);opacity:1}",
+      // The board rings every focusable thing in amber. Here that draws a
+      // box inside a box: this field is auto-focused the moment the
+      // palette opens and is the only focusable thing in it, so the ring
+      // marks nothing the open dialog has not already said.
+      ".ll-pal-in:focus,.ll-pal-in:focus-visible{outline:none!important}",
+      ".ll-pal-list{overflow-y:auto;padding:6px}",
+      ".ll-pal-sec{font-size:var(--t-micro);font-weight:700;",
+      "letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-3);",
+      "padding:10px 12px 5px}",
+      ".ll-pal-item{display:flex;align-items:center;gap:12px;padding:9px 12px;",
+      "border-radius:var(--radius);cursor:pointer;user-select:none}",
+      ".ll-pal-item .lb{flex:1 1 auto;font-size:var(--t-small);",
+      "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".ll-pal-item .ht{font-family:var(--font-board);font-size:var(--t-small);",
+      "color:var(--ink-3);white-space:nowrap}",
+      ".ll-pal-item.is-on{background:var(--amber-12)}",
+      ".ll-pal-item.is-on .lb{color:var(--amber)}",
+      ".ll-pal-item.is-here .lb::after{content:' \\00b7 showing';color:var(--ink-3);",
+      "font-size:var(--t-micro);letter-spacing:0.06em}",
+      ".ll-pal-none{padding:22px 14px;text-align:center;color:var(--ink-3);",
+      "font-size:var(--t-small)}",
+      ".ll-pal-foot{border-top:1px solid var(--rule);padding:8px 14px;",
+      "font-size:var(--t-micro);color:var(--ink-3);display:flex;gap:16px}",
+      "@media (prefers-reduced-motion: reduce){",
+      ".ll-pal-back,.ll-pal{transition:none}}"
+    ].join("");
+    d.head.appendChild(css);
+
+    var back = d.createElement("div");
+    back.className = "ll-pal-back";
+    back.setAttribute("hidden", "");
+    back.innerHTML =
+      '<div class="ll-pal" role="dialog" aria-modal="true" aria-label="Command palette">' +
+        '<input class="ll-pal-in" type="text" autocomplete="off" spellcheck="false" ' +
+               'placeholder="Jump to a month, or an action…" aria-label="Search commands">' +
+        '<div class="ll-pal-list" role="listbox"></div>' +
+        '<div class="ll-pal-foot"><span>↑↓ move</span><span>↵ select</span>' +
+        '<span>esc close</span></div>' +
+      '</div>';
+    d.body.appendChild(back);
+
+    var input = back.querySelector(".ll-pal-in");
+    var list = back.querySelector(".ll-pal-list");
+    var shown = [];
+    var cursor = 0;
+
+    function items() {
+      var p = window.__llPaletteData;
+      return (p && p.items) ? p.items : [];
+    }
+
+    function matches(q) {
+      var all = items();
+      if (!q) { return all; }
+      var needle = q.toLowerCase();
+      return all.filter(function (it) {
+        return (it.label + " " + (it.hint || "") + " " + (it.section || ""))
+          .toLowerCase().indexOf(needle) !== -1;
+      });
+    }
+
+    function draw() {
+      shown = matches(input.value.trim());
+      if (cursor >= shown.length) { cursor = Math.max(0, shown.length - 1); }
+      if (!shown.length) {
+        list.innerHTML = '<div class="ll-pal-none">Nothing matches that.</div>';
+        return;
+      }
+      var html = "", section = null;
+      shown.forEach(function (it, i) {
+        if (it.section !== section) {
+          section = it.section;
+          html += '<div class="ll-pal-sec">' + esc(section) + "</div>";
+        }
+        html += '<div class="ll-pal-item' + (i === cursor ? " is-on" : "") +
+                (it.here ? " is-here" : "") + '" data-i="' + i + '" role="option">' +
+                '<span class="lb">' + esc(it.label) + "</span>" +
+                (it.hint ? '<span class="ht">' + esc(it.hint) + "</span>" : "") +
+                "</div>";
+      });
+      list.innerHTML = html;
+      var on = list.querySelector(".is-on");
+      if (on) { on.scrollIntoView({ block: "nearest" }); }
+    }
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;",
+                 '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+
+    function open() {
+      back.removeAttribute("hidden");
+      // one frame before the class, so the transition has a start state
+      requestAnimationFrame(function () { back.classList.add("is-open"); });
+      input.value = "";
+      cursor = 0;
+      draw();
+      input.focus();
+    }
+
+    function close() {
+      back.classList.remove("is-open");
+      back.setAttribute("hidden", "");
+    }
+
+    function isOpen() { return !back.hasAttribute("hidden"); }
+
+    function choose(i) {
+      var it = shown[i];
+      if (!it) { return; }
+      close();
+
+      // A filter item drives the board's own search box rather than clicking
+      // anything. Assigning .value on a React-controlled input is invisible to
+      // React -- it tracks the last value it set and skips the change as a
+      // no-op -- so the write goes through the prototype's native setter and
+      // is then announced with a bubbling input event, which is the shape
+      // React's own listener is waiting for. Blur is what commits it: a
+      // st.text_input sends its value on blur or Enter, and blur does not
+      // depend on faking a trusted keystroke.
+      //
+      // focus() first, and not for tidiness. Focus was in the palette's own
+      // field, so this box had none -- and blur() on an element that is not
+      // focused fires no blur event at all. Without the focus the value landed
+      // in the DOM, the board never reran, and the search box sat there showing
+      // a filter that was not applied.
+      if (it.fill !== undefined) {
+        var box = d.querySelector('[class*="st-key-board_search"] input');
+        if (!box) { return; }
+        var setter = Object.getOwnPropertyDescriptor(
+          box.ownerDocument.defaultView.HTMLInputElement.prototype, "value").set;
+        box.focus();
+        setter.call(box, it.fill);
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        box.blur();
+        return;
+      }
+
+      // Everything else clicks the off-screen Streamlit button that owns the
+      // action, so the change arrives through the same path as any other
+      // widget: one rerun, no page load.
+      var btn = d.querySelector(".st-key-" + it.key + " button");
+      if (btn) { btn.click(); }
+    }
+
+    list.addEventListener("mousemove", function (e) {
+      var row = e.target.closest(".ll-pal-item");
+      if (!row) { return; }
+      var i = parseInt(row.getAttribute("data-i"), 10);
+      if (i !== cursor) { cursor = i; draw(); }
+    });
+    list.addEventListener("click", function (e) {
+      var row = e.target.closest(".ll-pal-item");
+      if (row) { choose(parseInt(row.getAttribute("data-i"), 10)); }
+    });
+    back.addEventListener("mousedown", function (e) {
+      if (e.target === back) { close(); }
+    });
+    input.addEventListener("input", function () { cursor = 0; draw(); });
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        cursor = shown.length ? (cursor + 1) % shown.length : 0;
+        draw();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        cursor = shown.length ? (cursor - 1 + shown.length) % shown.length : 0;
+        draw();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        choose(cursor);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+      }
+    });
+
+    d.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && isOpen()) { e.preventDefault(); close(); return; }
+      if (e.key !== "k" && e.key !== "K") { return; }
+      if (!(e.metaKey || e.ctrlKey)) { return; }
+      // Ctrl+K is "delete to end of line" inside a text field on some
+      // platforms, and the Finance Bot composer is a text field people write
+      // paragraphs in. Typing there wins; everywhere else the palette does.
+      var el = d.activeElement;
+      if (el && el !== input && el.closest &&
+          el.closest('[data-testid="stChatInput"]')) { return; }
+      e.preventDefault();
+      if (isOpen()) { close(); } else { open(); }
+    }, true);
+  };
+
+  // Run install() in the parent's own realm, so nothing it registers belongs to
+  // this frame. Passing the function through toString is what carries it
+  // across; it closes over nothing from here on purpose.
+  try {
+    var s = doc.createElement("script");
+    s.textContent = "(" + install.toString() + ")();";
+    doc.documentElement.appendChild(s);
+    s.parentNode.removeChild(s);   // it has already run; leaving it piles up
+  } catch (e) { /* no palette; every route it offers exists elsewhere too */ }
+})();
+</script>

@@ -33,6 +33,32 @@ DELAYED = "#FFB300"
 # Recessive bars still have to be legible against the panel.
 BAR_MUTED = "#5E6E84"
 
+# Streamlit's OWN theme, which is a separate thing from the stylesheet below.
+# st.dataframe and st.data_editor paint their cells to a canvas from a
+# JavaScript theme Streamlit builds, and CSS cannot reach a canvas — so these
+# few values are the only lever on the ledger and debt tables.
+#
+# This dict is handed to themesync.html at runtime, which used to carry its own
+# hardcoded copy. The same values are ALSO in .streamlit/config.toml, which
+# Streamlit reads at boot before any of this imports and so cannot be generated
+# from here; those two must be kept in step by hand. Two copies is one fewer
+# than there were, and the radii below are why that mattered — a sixth field
+# duplicated three ways is a drift waiting to happen.
+STREAMLIT_THEME = {
+    "Dark": {
+        "base": "dark", "primaryColor": "#FFB300",
+        "backgroundColor": "#07090C", "secondaryBackgroundColor": "#0E1116",
+        "textColor": "#E9EDF2", "font": "sans serif",
+        "baseRadius": "10px", "buttonRadius": "10px",
+    },
+    "Light": {
+        "base": "light", "primaryColor": "#A85D00",
+        "backgroundColor": "#FBF8F0", "secondaryBackgroundColor": "#F3EDE0",
+        "textColor": "#1A1712", "font": "sans serif",
+        "baseRadius": "10px", "buttonRadius": "10px",
+    },
+}
+
 # One hue per platform, in the manner of transit line colours. These are the
 # only categorical colours in the product; charts read from this same map so a
 # category is the same colour everywhere it appears.
@@ -123,6 +149,54 @@ def donut_svg(records, total, center_label="", size=132, thickness=18, amount_fm
             f'{track}{"".join(arcs)}{center}</svg>')
 
 
+def trend_svg(values, colour, width=104, height=26, label=""):
+    """Inline sparkline for one category's spend across months.
+
+    Scaled to its OWN peak, not to a scale shared with the other categories.
+    The question this answers is "is this line rising", which is about a
+    category against its own past; a shared scale would answer a different
+    question and would flatten every small category into a straight line while
+    it did so. The amount beside each row is what makes them comparable.
+    """
+    values = [float(v) for v in values]
+    if len(values) < 2:
+        return ""
+    top = max(values)
+    inset = 1.5
+    floor_y = height - inset
+    span_x = width - inset * 2
+    span_y = height - inset * 2
+
+    if top <= 0:
+        # A months-long flat zero is a real answer. Drawing nothing would look
+        # like missing data, which is a different and wrong statement.
+        line = (f'<line x1="{inset}" y1="{floor_y:.2f}" x2="{width - inset}" '
+                f'y2="{floor_y:.2f}" stroke="{colour}" stroke-width="1.6" '
+                f'stroke-linecap="round" opacity="0.35"/>')
+        pts_last = None
+        body = line
+    else:
+        step = span_x / (len(values) - 1)
+        pts = [(inset + i * step, floor_y - (v / top) * span_y)
+               for i, v in enumerate(values)]
+        poly = " ".join(f"{x:.2f},{y:.2f}" for x, y in pts)
+        area = (f'<polygon points="{inset},{floor_y:.2f} {poly} '
+                f'{width - inset},{floor_y:.2f}" fill="{colour}" '
+                f'fill-opacity="0.15" stroke="none"/>')
+        line = (f'<polyline points="{poly}" fill="none" stroke="{colour}" '
+                f'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>')
+        pts_last = pts[-1]
+        body = area + line
+
+    tip = (f'<circle cx="{pts_last[0]:.2f}" cy="{pts_last[1]:.2f}" r="2.1" '
+           f'fill="{colour}" stroke="none"/>') if pts_last else ""
+    title = f"<title>{esc(label)}</title>" if label else ""
+
+    return (f'<svg class="ll-spark" width="{width}" height="{height}" '
+            f'viewBox="0 0 {width} {height}" role="img" '
+            f'aria-label="{esc(label or "trend")}">{title}{body}{tip}</svg>')
+
+
 # --------------------------------------------------------------- stylesheet
 #
 # Two palettes share one set of tokens. The dark palette is the product's
@@ -163,13 +237,31 @@ _FONT_AND_SCALE = """
   --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
 
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --radius: 3px;
+
+  /* Two kinds of object live on this screen and they want different corners.
+     The MECHANISM — flap tiles, platform chips, meter tracks, the run strip —
+     stays hard, because square is what makes a flap read as a physical thing
+     rather than a number in a box. The CHROME around it — buttons, inputs,
+     dialogs, banners — is furniture, not mechanism, and at 3px it read like a
+     framework default. Softening only the chrome makes the board a housing
+     with a hard mechanism inside it, which is a truer story than the uniform
+     near-square this file used to enforce. */
+  --radius-tile: 2px;   /* flaps, chips, meters, run strip */
+  --radius-sm:   6px;   /* inline code, the composer's send key */
+  --radius:      10px;  /* buttons, inputs, banners, popovers, tooltips */
+  --radius-lg:   14px;  /* housings: the board, side panels, the dialog */
+
+  /* Chip ink is deliberately mode-invariant. It was var(--void), which is
+     near-black in dark mode but CREAM in light — so a light-mode Shopping chip
+     put #EDE7D9 text on #FBBF24. Both the note above and DESIGN.md already
+     claimed a fixed always-dark ink; only the code disagreed. */
+  --chip-ink: #07090C;
 
   /* Hairlines and the amber wash both derive from a raw r,g,b triplet rather
      than a fixed rgba(), so a single color swap per mode (below) is enough to
      re-theme every hairline, hover and hairline-adjacent tint at once. */
-  --rule:      rgba(var(--ink-rgb),0.085);
-  --rule-2:    rgba(var(--ink-rgb),0.17);
+  --rule:      rgba(var(--ink-rgb),var(--rule-a));
+  --rule-2:    rgba(var(--ink-rgb),var(--rule-2-a));
   --amber-12:  rgba(var(--amber-rgb),0.12);
   --amber-24:  rgba(var(--amber-rgb),0.24);
 """
@@ -192,6 +284,13 @@ _DARK_VARS = """
   --shade-strong: rgba(7,9,12,0.55);
   --shade-soft:   rgba(7,9,12,0.35);
   --board-shadow: rgba(0,0,0,0.9);
+  --rule-a:       0.085;
+  --rule-2-a:     0.17;
+  /* Chrome elevation. Content is still divided by hairlines, never boxed —
+     these are for things you press or that float above the page. */
+  --lift-1: 0 1px 2px rgba(0,0,0,0.35);
+  --lift-2: 0 4px 12px -2px rgba(0,0,0,0.5);
+  --lift-3: 0 24px 60px -16px rgba(0,0,0,0.72);
   --blank-tile:      linear-gradient(180deg, #161C25 0 49.6%, #0F141B 50.4% 100%);
   --blank-tile-edge: rgba(233,237,242,0.028);
   --blank-tile-seam: rgba(0,0,0,0.55);
@@ -217,9 +316,17 @@ _LIGHT_VARS = """
   --departure: #C7392A;
   --ink-rgb:      26,23,18;
   --void-rgb:     26,23,18;
-  --shade-strong: rgba(26,23,18,0.045);
-  --shade-soft:   rgba(26,23,18,0.028);
-  --board-shadow: rgba(20,18,14,0.16);
+  --shade-strong: rgba(26,23,18,0.070);
+  --shade-soft:   rgba(26,23,18,0.040);
+  --board-shadow: rgba(20,18,14,0.22);
+  /* Dark ink on cream reads fainter than pale ink on near-black at the same
+     alpha, so light mode runs its hairlines higher to land in the same place.
+     Held per mode rather than in the shared derivation so dark is untouched. */
+  --rule-a:       0.12;
+  --rule-2-a:     0.22;
+  --lift-1: 0 1px 2px rgba(20,18,14,0.10);
+  --lift-2: 0 4px 12px -2px rgba(20,18,14,0.15);
+  --lift-3: 0 24px 60px -16px rgba(20,18,14,0.24);
   --blank-tile:      linear-gradient(180deg, rgba(26,23,18,0.10) 0 49.6%,
                                              rgba(26,23,18,0.145) 50.4% 100%);
   --blank-tile-edge: rgba(26,23,18,0.06);
@@ -305,7 +412,7 @@ html, body, [data-testid="stAppViewContainer"] {
   font-family: var(--font-ui) !important;
   color: var(--ink) !important;
   background:
-    radial-gradient(1200px 520px at 50% -8%, rgba(255,179,0,0.055), transparent 65%),
+    radial-gradient(1200px 520px at 50% -8%, rgba(var(--amber-rgb),0.055), transparent 65%),
     var(--void) !important;
 }
 .block-container {
@@ -349,7 +456,7 @@ a { color: var(--amber); text-underline-offset: 3px; text-decoration-thickness: 
 .stApp [role="combobox"]:focus-visible {
   outline: 2px solid var(--amber) !important;
   outline-offset: 2px !important;
-  border-radius: 2px;
+  border-radius: var(--radius);
 }
 
 .ll-icon { display: block; flex: 0 0 auto; }
@@ -531,7 +638,7 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
   container-name: board;
   background: linear-gradient(180deg, var(--panel-2) 0%, var(--panel) 100%);
   border: 1px solid var(--rule-2);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   box-shadow: 0 24px 60px -28px var(--board-shadow), inset 0 1px 0 rgba(var(--ink-rgb),0.05);
   overflow: hidden;
 }
@@ -621,7 +728,7 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
 .ll-flap {
   position: relative; display: inline-block;
   background: var(--flap-face);
-  border-radius: 2px; padding: 0.07em 0.055em 0.09em;
+  border-radius: var(--radius-tile); padding: 0.07em 0.055em 0.09em;
   box-shadow: inset 0 0 0 1px var(--flap-edge), 0 2px 5px var(--flap-shadow);
   min-width: 0.62em; text-align: center;
 }
@@ -707,7 +814,8 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
   position: absolute !important; left: -9999px !important; top: 0 !important;
   width: 1px !important; height: 1px !important; overflow: hidden !important;
 }
-div[class*="st-key-rm_"] { position: absolute !important; left: -9999px !important;
+div[class*="st-key-rm_"], div[class*="st-key-jump_"] {
+  position: absolute !important; left: -9999px !important;
   width: 1px !important; height: 1px !important; overflow: hidden !important; }
 
 /* ---- confirm bar for removing an entry ---- */
@@ -759,8 +867,9 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 }
 .ll-plat {
   font-family: var(--font-board); font-size: var(--t-micro); font-weight: 700;
-  letter-spacing: 0.06em; text-align: center; padding: 3px 0; border-radius: 2px;
-  color: var(--void);
+  letter-spacing: 0.06em; text-align: center; padding: 3px 0;
+  border-radius: var(--radius-tile);
+  color: var(--chip-ink);
 }
 .ll-row-label {
   font-size: var(--t-body); color: var(--ink); font-weight: 500;
@@ -787,7 +896,7 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
    of solid mid-grey bars — precisely the loading-skeleton look the note above
    says to avoid. Tokenised so each mode gets a faint recess in its own ink. */
 .ll-row.is-blank .ll-blank-tile {
-  position: relative; height: 26px; border-radius: 2px;
+  position: relative; height: 26px; border-radius: var(--radius-tile);
   background: var(--blank-tile);
   box-shadow: inset 0 0 0 1px var(--blank-tile-edge);
   opacity: 0.55;
@@ -812,16 +921,19 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 
 .ll-panel {
   background: var(--panel); border: 1px solid var(--rule-2);
-  border-radius: var(--radius); overflow: hidden;
+  border-radius: var(--radius-lg); overflow: hidden;
 }
 .ll-panel-head {
   display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
   padding: var(--s3) var(--s4); border-bottom: 1px solid var(--rule);
 }
+/* A panel title names a piece of furniture, not a platform. It reads; it does
+   not announce. Column titles (ARRIVALS / DEPARTURES) are the board itself and
+   keep the signage treatment - the two rules split here deliberately. */
 .ll-panel-title {
   display: flex; align-items: center; gap: 8px;
-  font-family: var(--font-board); font-size: var(--t-h3); font-weight: 700;
-  letter-spacing: 0.13em; text-transform: uppercase; color: var(--ink-2);
+  font-family: var(--font-ui); font-size: var(--t-h3); font-weight: 600;
+  letter-spacing: normal; text-transform: none; color: var(--ink);
 }
 .ll-panel-body { padding: var(--s4); }
 
@@ -868,7 +980,18 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 }
 
 /* ---- obligations ---- */
-.ll-oblig { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--rule); }
+/* Three cells: the two components and the figure they add up to. Net worth was
+   computed in finance.py from the day the obligations panel shipped, but only
+   the bot could see it — the two numbers it is made of sat side by side here
+   and the total was nowhere on screen. */
+.ll-oblig { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--rule); }
+@container board (max-width: 620px) {
+  .ll-oblig { grid-template-columns: 1fr; }
+}
+/* The total is the point of the panel, so it reads in the board's own ink
+   rather than the neutral the two components use. */
+.ll-oblig-cell.is-total .ll-oblig-value { color: var(--amber); }
+.ll-oblig-cell.is-total.is-neg .ll-oblig-value { color: var(--departure); }
 .ll-oblig-cell { background: var(--panel); padding: var(--s4); display: flex; flex-direction: column; gap: 5px; }
 .ll-oblig-label {
   font-size: var(--t-micro); font-weight: 700; letter-spacing: 0.15em;
@@ -882,6 +1005,84 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 .ll-oblig-value { color: var(--ink); }
 .ll-oblig-note { font-size: var(--t-micro); color: var(--ink-3); }
 
+/* ---- share / trend, switched without a round trip ----------------------
+   One checkbox, the same pure-CSS idea as .ll-expand on the ledger columns: the
+   browser swaps the view instantly, with no rerun, no reload and no scroll
+   position lost. The input is the first child of .ll-panel so a general sibling
+   combinator can reach both the head (to light the active segment) and the body
+   (to swap the views).
+
+   This was written with two radios first, because a lone checkbox re-clicked on
+   the segment already showing would toggle back and fight the user. That does
+   not work: a radio hidden with display:none is never activated by a click on
+   its label — measured in Chromium, where flipping the very same element's type
+   to checkbox and clicking the same label checked it. Association was fine
+   either way (label.control resolved), so this is about how a radio group is
+   activated, not about the markup.
+
+   The segmented behaviour is recovered by making the ACTIVE label inert:
+   pointer-events:none on the option you are already on, so clicking it does
+   nothing, which is what a segmented control does. */
+.ll-vr { display: none !important; }
+.ll-panel-tools { display: flex; align-items: center; gap: var(--s3); }
+.ll-seg {
+  display: inline-flex; gap: 2px; padding: 2px;
+  background: var(--shade-soft); border-radius: var(--radius-sm);
+}
+.ll-seg label {
+  font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.02em;
+  padding: 4px 10px; border-radius: calc(var(--radius-sm) - 2px);
+  color: var(--ink-3); cursor: pointer; user-select: none;
+  transition: background 140ms var(--ease), color 140ms var(--ease);
+}
+.ll-seg label:hover { color: var(--ink); }
+.ll-seg .seg-share,
+#ll-view:checked ~ .ll-panel-head .ll-seg .seg-trend {
+  background: var(--panel-3); color: var(--ink); box-shadow: var(--lift-1);
+  pointer-events: none;
+}
+#ll-view:checked ~ .ll-panel-head .ll-seg .seg-share {
+  background: transparent; color: var(--ink-3); box-shadow: none;
+  pointer-events: auto;
+}
+.ll-trend { display: none; }
+#ll-view:checked ~ .ll-panel-body .ll-load { display: none; }
+#ll-view:checked ~ .ll-panel-body .ll-trend { display: block; }
+
+.ll-trend-row {
+  display: grid; grid-template-columns: 30px minmax(0,1fr) auto auto auto;
+  align-items: center; gap: var(--s3);
+  padding: 8px 0; border-bottom: 1px solid var(--rule);
+}
+.ll-trend-row:last-child { border-bottom: none; }
+.ll-trend-name {
+  font-size: var(--t-small); color: var(--ink); font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ll-spark { display: block; overflow: visible; }
+.ll-trend-amt {
+  font-family: var(--font-board); font-size: var(--t-small); font-weight: 600;
+  color: var(--ink-2); white-space: nowrap;
+}
+/* Rising spend is the departure tone and falling spend is the arrival tone,
+   which is the same reading the board's own "+15% vs August" note uses. This
+   is status, not a third job for hue. */
+.ll-trend-delta {
+  font-size: var(--t-micro); font-weight: 700; letter-spacing: 0.04em;
+  white-space: nowrap; min-width: 46px; text-align: right;
+}
+.ll-trend-delta.up { color: var(--departure); }
+.ll-trend-delta.down { color: var(--arrival); }
+.ll-trend-delta.flat, .ll-trend-delta.new { color: var(--ink-3); }
+.ll-trend-foot {
+  padding-top: var(--s3); font-size: var(--t-micro); color: var(--ink-3);
+  line-height: 1.5;
+}
+@container board (max-width: 720px) {
+  .ll-trend-row { grid-template-columns: 30px minmax(0,1fr) auto auto; }
+  .ll-trend-row .ll-spark { display: none; }
+}
+
 /* ---- utilisation meter ---- */
 .ll-meter-top {
   display: flex; align-items: baseline; justify-content: space-between;
@@ -893,10 +1094,10 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 }
 .ll-meter-cap { font-size: var(--t-micro); color: var(--ink-3); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .ll-meter-track {
-  height: 8px; background: rgba(var(--ink-rgb),0.07); border-radius: 2px;
+  height: 8px; background: rgba(var(--ink-rgb),0.07); border-radius: var(--radius-tile);
   overflow: hidden; position: relative;
 }
-.ll-meter-fill { height: 100%; border-radius: 2px; }
+.ll-meter-fill { height: 100%; border-radius: var(--radius-tile); }
 .ll-meter-mark { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--rule-2); }
 .ll-meter-foot { margin-top: 9px; font-size: var(--t-micro); color: var(--ink-3); }
 .ll-meter-foot b { color: var(--ink-2); font-weight: 600; }
@@ -917,10 +1118,10 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 .ll-run-track {
   position: relative; flex: 1 1 auto; display: flex; flex-direction: column;
   justify-content: flex-end; background: rgba(var(--ink-rgb),0.035);
-  border-radius: 2px; overflow: hidden;
+  border-radius: var(--radius-tile); overflow: hidden;
 }
 .ll-run-fill {
-  min-height: 3px; border-radius: 2px 2px 0 0;
+  min-height: 3px; border-radius: var(--radius-tile) var(--radius-tile) 0 0;
   background:
     repeating-linear-gradient(180deg,
       rgba(255,255,255,0.055) 0 1px,
@@ -950,7 +1151,7 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   font-size: var(--t-micro); color: var(--ink-3); letter-spacing: 0.06em;
 }
 .ll-run-key i {
-  display: inline-block; width: 18px; height: 9px; border-radius: 2px;
+  display: inline-block; width: 18px; height: 9px; border-radius: var(--radius-tile);
   margin-right: 8px; vertical-align: middle; font-style: normal;
 }
 .ll-run-key .k-out { background: #5E6E84; }
@@ -959,9 +1160,10 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 /* ---- data tables inherit the board's rules, not Streamlit's default chrome */
 [data-testid="stDataFrame"] thead th, [data-testid="stDataEditor"] thead th {
   background: var(--panel-2) !important;
-  font-size: var(--t-micro) !important; font-weight: 700 !important;
-  letter-spacing: 0.12em !important; text-transform: uppercase !important;
-  color: var(--ink-3) !important;
+  font-family: var(--font-ui) !important;
+  font-size: var(--t-small) !important; font-weight: 600 !important;
+  letter-spacing: normal !important; text-transform: none !important;
+  color: var(--ink-2) !important;
 }
 
 /* ---- board legend, shown in the bot rail while the chat is empty ----
@@ -1151,7 +1353,7 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 .ll-nokey-body { font-size: var(--t-small); color: var(--ink-3); line-height: 1.55; }
 .ll-nokey-body code {
   background: var(--shade-soft); color: var(--ink-2);
-  padding: 1px 5px; border-radius: 3px; font-size: 0.92em;
+  padding: 1px 5px; border-radius: var(--radius-sm); font-size: 0.92em;
 }
 
 /* ---- debt aging: same departure tone used for is-neg elsewhere, applied to
@@ -1217,7 +1419,10 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   border: 1px solid var(--rule-2) !important;
   border-radius: var(--radius) !important;
   min-height: 36px !important;
-  transition: background 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease) !important;
+  box-shadow: var(--lift-1) !important;
+  transition: background 140ms var(--ease), border-color 140ms var(--ease),
+              color 140ms var(--ease), box-shadow 140ms var(--ease),
+              transform 90ms var(--ease) !important;
 }
 .stButton button:hover, .stFormSubmitButton button:hover,
 [data-testid="stDownloadButton"] button:hover,
@@ -1225,6 +1430,15 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   background: var(--panel-3) !important;
   border-color: var(--amber) !important;
   color: var(--amber) !important;
+  box-shadow: var(--lift-2) !important;
+}
+/* A button that does not move under the cursor reads as a picture of a
+   button. One pixel and the shadow collapsing is the whole effect. */
+.stButton button:active, .stFormSubmitButton button:active,
+[data-testid="stDownloadButton"] button:active,
+[data-testid="stPopover"] > div > button:active {
+  transform: translateY(1px) !important;
+  box-shadow: none !important;
 }
 .stButton button p, .stFormSubmitButton button p, [data-testid="stDownloadButton"] button p {
   font-weight: 600 !important; -webkit-text-fill-color: currentColor !important;
@@ -1245,9 +1459,10 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 }
 
 [data-testid="stWidgetLabel"] p, [data-testid="stWidgetLabel"] label {
-  font-size: var(--t-micro) !important; font-weight: 700 !important;
-  letter-spacing: 0.14em !important; text-transform: uppercase !important;
-  color: var(--ink-3) !important; margin-bottom: 5px !important;
+  font-family: var(--font-ui) !important;
+  font-size: var(--t-small) !important; font-weight: 600 !important;
+  letter-spacing: normal !important; text-transform: none !important;
+  color: var(--ink-2) !important; margin-bottom: 5px !important;
 }
 [data-testid="stTextInput"] input, [data-testid="stNumberInput"] input,
 [data-testid="stDateInput"] input, [data-baseweb="select"] > div,
@@ -1332,9 +1547,9 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   background: transparent !important;
 }
 [data-testid="stMarkdownContainer"] th {
-  font-family: var(--font-board) !important; font-weight: 700 !important;
-  letter-spacing: 0.08em !important; text-transform: uppercase !important;
-  font-size: var(--t-micro) !important; color: var(--ink-2) !important;
+  font-family: var(--font-ui) !important; font-weight: 600 !important;
+  letter-spacing: normal !important; text-transform: none !important;
+  font-size: var(--t-small) !important; color: var(--ink-2) !important;
   text-align: left !important; background: var(--shade-strong) !important;
 }
 [data-testid="stMarkdownContainer"] th,
@@ -1346,25 +1561,44 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 }
 [data-testid="stMarkdownContainer"] code {
   background: var(--shade-strong) !important; padding: 1px 5px !important;
-  border-radius: 3px !important; font-size: 0.92em !important;
+  border-radius: var(--radius-sm) !important; font-size: 0.92em !important;
 }
 /* A table wider than the rail must scroll inside its own message, not push
    the chat column sideways. */
 [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] { overflow-x: auto !important; }
 
-[data-testid="stTabs"] [data-baseweb="tab-list"] {
+/* Tabs are addressed by data-testid and ARIA role, NOT by data-baseweb.
+   Streamlit moved this widget off BaseWeb onto react-aria, and the four
+   [data-baseweb="tab*"] rules that used to live here matched nothing at all
+   afterwards — measured, not guessed: with the ledgers expander open and four
+   tabs on screen, every one of those selectors returned zero elements while
+   [data-testid="stTab"] returned four. Nothing announced the change, because
+   dead CSS fails silently; the tabs had simply been rendering in Streamlit's
+   own Source Sans at its own size, and the selected tab was the same ink as
+   the others. The amber selection bar was all that still worked, and only
+   because react-aria draws it from primaryColor in config.toml.
+
+   The label lives in a nested markdown container, so the type rules go on the
+   <p> and only the box rules go on the tab. */
+[data-testid="stTabs"] [role="tablist"] {
   gap: 2px !important; background: transparent !important;
   border-bottom: 1px solid var(--rule) !important;
 }
-[data-testid="stTabs"] [data-baseweb="tab"] {
-  font-family: var(--font-board) !important; font-size: var(--t-small) !important;
-  font-weight: 600 !important; letter-spacing: 0.12em !important;
-  text-transform: uppercase !important; color: var(--ink-3) !important;
+[data-testid="stTabs"] [data-testid="stTab"] {
   background: transparent !important; padding: 9px 15px !important;
 }
-[data-testid="stTabs"] [aria-selected="true"] { color: var(--amber) !important; }
-[data-testid="stTabs"] [data-baseweb="tab-highlight"] { background: var(--amber) !important; }
-[data-testid="stTabs"] [data-baseweb="tab-border"] { display: none !important; }
+[data-testid="stTabs"] [data-testid="stTab"] p {
+  font-family: var(--font-ui) !important; font-size: var(--t-small) !important;
+  font-weight: 600 !important; letter-spacing: normal !important;
+  text-transform: none !important; color: var(--ink-2) !important;
+}
+[data-testid="stTabs"] [data-testid="stTab"]:hover p { color: var(--ink) !important; }
+[data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] p {
+  color: var(--amber) !important;
+}
+[data-testid="stTabs"] .react-aria-SelectionIndicator {
+  background: var(--amber) !important;
+}
 
 [data-testid="stExpander"] {
   background: var(--panel) !important; border: 1px solid var(--rule-2) !important;
@@ -1377,9 +1611,9 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
    it. Pinned transparent in both states, with the hover tint drawn from the
    active token set instead of Streamlit's fixed blue-grey. */
 [data-testid="stExpander"] summary {
-  font-family: var(--font-board) !important; font-size: var(--t-small) !important;
-  font-weight: 700 !important; letter-spacing: 0.13em !important;
-  text-transform: uppercase !important; color: var(--ink-2) !important;
+  font-family: var(--font-ui) !important; font-size: var(--t-small) !important;
+  font-weight: 600 !important; letter-spacing: normal !important;
+  text-transform: none !important; color: var(--ink-2) !important;
   background: transparent !important; border-radius: var(--radius) !important;
 }
 [data-testid="stExpander"] summary:hover {
@@ -1418,12 +1652,14 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   background: var(--panel) !important;
   border: 1px solid var(--rule-2) !important;
   border-radius: var(--radius) !important;
+  box-shadow: var(--lift-2) !important;
 }
 [data-testid="stTooltipContent"] {
   background: var(--panel-3) !important;
   border: 1px solid var(--rule-2) !important;
   color: var(--ink) !important;
   border-radius: var(--radius) !important;
+  box-shadow: var(--lift-2) !important;
 }
 [data-testid="stTooltipContent"] * { color: var(--ink) !important; }
 
@@ -1464,7 +1700,8 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   background: var(--panel-2) !important;
   border: 1px solid var(--rule-2) !important;
   border-radius: var(--radius) !important;
-  transition: border-color 140ms ease;
+  box-shadow: var(--lift-1) !important;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
   /* The composer sits last in a tall column, and as a stretchy flex item it
      absorbed all the leftover height — which is what stretched an empty
      one-row field to 189px. Fixed basis: it takes only what it needs. */
@@ -1501,7 +1738,7 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 }
 [data-testid="stChatInput"] textarea { max-height: 7.5em !important; }
 [data-testid="stChatInput"] textarea::placeholder { color: var(--ink-3) !important; opacity: 1 !important; }
-[data-testid="stChatInput"] button { background: var(--amber) !important; border-radius: 2px !important; }
+[data-testid="stChatInput"] button { background: var(--amber) !important; border-radius: var(--radius-sm) !important; }
 [data-testid="stChatInput"] button svg { color: var(--void) !important; }
 
 
@@ -1817,7 +2054,8 @@ div.st-key-clear_chat button {
 [data-testid="stDialog"] [role="dialog"] {
   background: var(--panel) !important;
   border: 1px solid var(--rule-2) !important;
-  border-radius: var(--radius) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--lift-3) !important;
   color: var(--ink) !important;
 }
 [data-baseweb="modal"] [role="dialog"] *,
@@ -1833,7 +2071,7 @@ div.st-key-clear_chat button {
   background: var(--void) !important;
   color: var(--amber) !important;
   border: 1px solid var(--rule) !important;
-  border-radius: var(--radius) !important;
+  border-radius: var(--radius-sm) !important;
 }
 [data-baseweb="modal"] [role="dialog"] code *,
 [data-testid="stDialog"] [role="dialog"] code * { color: var(--amber) !important; }

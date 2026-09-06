@@ -49,6 +49,19 @@ back to the last known set when offline.
 the Platform Load panel, plus a projected month-end close from the current daily
 burn.
 
+**Trends across months.** The Platform Load panel switches between *Share* — the
+donut for the open month — and *Trend*, a twelve-month sparkline per category
+with the latest month set against that category's own average. Answers "is my
+Food spending rising", which a single-month view cannot. The switch is pure CSS,
+so it costs no reload.
+
+**Net worth.** Cash on hand plus what is owed to you, minus what you owe, beside
+the two figures it is made of.
+
+**Command palette.** Ctrl/Cmd+K to jump to any month, filter the board by
+platform, or open Settings and the bot. The sidebar rail only lists the ten most
+recent months; the palette is how you reach anything older.
+
 **Recurring entries and debt ageing.** Rent, subscriptions and salary are logged
 from a template once their day arrives. Unsettled debts past 30 days are called
 out with the number of days they have been outstanding.
@@ -164,6 +177,8 @@ right default on a laptop nothing can reach.
 | `demo.py` | Labelled sample data. |
 | `access.py` | Who may open the board, and which instance shows real records. |
 | `themesync.html` | Keeps Streamlit's own theme in step with the toggle, for the canvas-painted tables. |
+| `palette.html` | The Ctrl/Cmd+K command palette, injected into the parent document. |
+| `bridge.html` | Forwards a click on a board row to its off-screen Streamlit button. |
 | `DESIGN.md` | The design system, recorded from the built result. |
 | `PRODUCT.md` | Product truth: users, constraints, principles. |
 

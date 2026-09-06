@@ -512,7 +512,26 @@ def snapshot(frames: Frames, key: str) -> Snapshot:
     if prev_key and prev_key in series:
         snap.prev_outflow = series[prev_key].outflow
 
-    # --- spending by category, transport folded in as its own platform ---
+    records = _category_totals(frames, key)
+    if records:
+        snap.by_category = (pd.DataFrame(records)
+                            .sort_values("amount", ascending=False)
+                            .reset_index(drop=True))
+
+    snap.arrivals = _arrivals(frames, key)
+    snap.departures = _departures(frames, key)
+    return snap
+
+
+def _category_totals(frames: Frames, key: str) -> list[dict]:
+    """Spending by category for one period, transport folded into its platform.
+
+    Transport is its own ledger AND a spending category, which is a known
+    duplication in the model. Wherever a category total is reported the two must
+    be summed the same way, so both the donut and the trend read this — a second
+    implementation is how they would come to disagree by a few hundred rupees
+    and neither would look wrong on its own.
+    """
     exp = _in_period(frames.expenses, key)
     records = []
     if not exp.empty:
@@ -525,14 +544,20 @@ def snapshot(frames: Frames, key: str) -> Snapshot:
             merged["amount"] += trans_total
         else:
             records.append({"category": "Transportation", "amount": trans_total})
-    if records:
-        snap.by_category = (pd.DataFrame(records)
-                            .sort_values("amount", ascending=False)
-                            .reset_index(drop=True))
+    return records
 
-    snap.arrivals = _arrivals(frames, key)
-    snap.departures = _departures(frames, key)
-    return snap
+
+def category_series(frames: Frames, keys: list[str]) -> dict[str, list[float]]:
+    """Spend per category across `keys`, in the order given.
+
+    Every category that appears in any of those months gets a full-length list,
+    zero-filled where it had no spending — so the caller can draw them against a
+    shared axis without having to reconcile ragged rows.
+    """
+    per_month = [{r["category"]: float(r["amount"])
+                  for r in _category_totals(frames, k)} for k in keys]
+    names = sorted({c for month in per_month for c in month})
+    return {name: [month.get(name, 0.0) for month in per_month] for name in names}
 
 
 def _arrivals(frames: Frames, key: str) -> pd.DataFrame:

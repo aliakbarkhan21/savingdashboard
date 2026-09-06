@@ -45,6 +45,16 @@ allowedOrigins = [
 # viewer's active theme, which themesync.html keeps in step with the board's own
 # light/dark toggle. These values mirror the tokens in theme.py — background is
 # the panel colour rather than the page void, since it is grid cells it lands on.
+#
+# baseRadius / buttonRadius match --radius in theme.py. They are set here
+# because this file is the ONLY lever on the canvas grids' corners — and
+# because Streamlit paints a handful of surfaces (the expander shell, the
+# uploader button, portalled dropdowns) from these values before the stylesheet
+# reaches them, so a mismatch shows as one square widget in a soft page.
+#
+# Keep in step with theme.STREAMLIT_THEME, which is the runtime copy. Streamlit
+# reads this file at boot, before any of the app imports, so it cannot be
+# generated from Python.
 [theme]
 base = "dark"
 font = "sans serif"
@@ -54,9 +64,13 @@ primaryColor = "#FFB300"
 backgroundColor = "#07090C"
 secondaryBackgroundColor = "#0E1116"
 textColor = "#E9EDF2"
+baseRadius = "10px"
+buttonRadius = "10px"
 
 [theme.light]
 primaryColor = "#A85D00"
 backgroundColor = "#FBF8F0"
 secondaryBackgroundColor = "#F3EDE0"
 textColor = "#1A1712"
+baseRadius = "10px"
+buttonRadius = "10px"
