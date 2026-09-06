@@ -100,7 +100,7 @@ def chart_sequence(names) -> list:
     return [platform_color(n) for n in names]
 
 
-def donut_svg(records, total, center_label="", size=168, thickness=22, amount_fmt=None):
+def donut_svg(records, total, center_label="", size=184, thickness=24, amount_fmt=None):
     """Inline SVG donut for spending-by-platform.
 
     Styled to match the board rather than a chart library's default: a
@@ -944,8 +944,20 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 /* ---- platform load: spending by category as a stacked rail ---- */
 /* The ring is the panel's headline and the list is its detail, so the ring
    gets the room. align-items:center keeps them optically related when the list
-   is short — two categories should not leave a tall ring stranded at the top. */
-.ll-load { display: flex; align-items: center; gap: var(--s4); }
+   is short — two categories should not leave a tall ring stranded at the top.
+   
+   The list is capped rather than left to take every pixel to the panel edge.
+   Uncapped, a two-category month opened a hand's width of dead space between a
+   name and its percentage — inside the row, where it reads as a broken layout
+   rather than as margin. The cap moves that slack out of the rows.
+   
+   It goes to the right of the list, not between the ring and the list: pushing
+   the list to the panel edge with space-between only trades a hole inside the
+   rows for a 105px hole beside the ring, which is worse because it separates
+   the two halves of one reading. Slack against the panel's outer edge is quiet;
+   slack in the middle of a composition is not. */
+.ll-load { display: flex; align-items: center; gap: var(--s4);
+           justify-content: flex-start; }
 .ll-donut-wrap { flex: 0 0 auto; }
 .ll-donut circle { transition: opacity 140ms var(--ease); }
 .ll-donut:hover circle:not(:hover) { opacity: 0.55; }
@@ -957,7 +969,8 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   font-family: var(--font-ui); font-size: var(--t-micro); font-weight: 600;
   letter-spacing: 0.14em; text-transform: uppercase; fill: var(--ink-3);
 }
-.ll-load-list { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0; }
+.ll-load-list { flex: 0 1 auto; min-width: 0; max-width: 380px; width: 100%;
+                display: flex; flex-direction: column; gap: 0; }
 .ll-load-item {
   display: grid; grid-template-columns: 30px 1fr auto auto; align-items: center;
   gap: var(--s3); padding: 7px 0; border-bottom: 1px solid var(--rule);
@@ -983,7 +996,9 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 }
 @media (max-width: 900px) {
   .ll-load { flex-direction: column; align-items: flex-start; }
-  .ll-load-list { width: 100%; }
+  /* Stacked, the list has the full width to itself and the cap would only
+     strand the amounts mid-panel. */
+  .ll-load-list { width: 100%; max-width: none; }
 }
 
 /* ---- obligations ---- */
