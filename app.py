@@ -577,9 +577,14 @@ with st.sidebar:
         # Inside the form so clear_on_submit resets it to today after every
         # entry — left outside, a backdated date silently kept applying to
         # every entry logged after it until someone noticed.
+        # No "logging to <date>, not today" warning under this. There was one,
+        # and a widget inside a form does not rerun the page when it changes —
+        # so the line was always drawn from the date as it stood on the LAST
+        # script run, not the one in the picker. It sat there after the date had
+        # been changed back, and stayed missing on a date just chosen. A warning
+        # that is wrong in both directions is worse than none: the picker itself
+        # already shows the date, in the same format the warning was repeating.
         when = st.date_input("Date", value=date.today(), format="DD/MM/YYYY")
-        if when != date.today():
-            st.caption(f"⚠️ Logging to {when.strftime('%d/%m/%Y')}, not today")
 
         if kind == "Expense":
             what = st.text_input("Description", placeholder="Karahi with the boys")
