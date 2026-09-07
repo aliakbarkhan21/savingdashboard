@@ -2293,6 +2293,7 @@ div.st-key-clear_chat button {
 /* Square, and the same height as the search field beside them so the row
    reads as one line rather than three things that happen to be near each
    other. */
+.st-key-toggle_theme button,
 .st-key-toggle_bot button,
 .st-key-open_settings button {
   width: 39px !important;
@@ -2301,6 +2302,7 @@ div.st-key-clear_chat button {
   min-height: 39px !important;
   padding: 0 !important;
 }
+.st-key-toggle_theme button > div,
 .st-key-toggle_bot button > div,
 .st-key-open_settings button > div { gap: 0 !important; }
 /* The row these sit in used to carry two labelled buttons and was spaced like

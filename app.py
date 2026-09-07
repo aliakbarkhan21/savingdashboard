@@ -99,6 +99,12 @@ def _palette_template() -> str:
     return (pathlib.Path(__file__).parent / "palette.html").read_text(encoding="utf-8")
 
 
+# Keeps every dropdown from behaving like a text field. Mounted here, beside
+# themesync, because it has to be running before the first selectbox is drawn
+# and it must not depend on any branch further down the script.
+st.iframe(pathlib.Path(__file__).parent / "selectlock.html", height=1)
+
+
 components.html(
     _themesync_template()
     .replace("__LL_THEMES__", json.dumps(theme.STREAMLIT_THEME))
@@ -567,13 +573,9 @@ with st.sidebar:
          '<div class="ll-mast-sub">Departures board</div>',
          '</div>')
 
-    # st.button labels are plain markdown, not HTML — no inline SVG icon here,
-    # unlike the rest of the board's controls which go through icons.icon().
-    if st.button(f"{'☀ Light mode' if IS_DARK else '☾ Dark mode'}",
-                 key="toggle_theme", width="stretch"):
-        st.session_state.theme_mode = "light" if IS_DARK else "dark"
-        st.query_params["theme"] = st.session_state.theme_mode
-        st.rerun()
+    # The theme toggle used to sit here, full width, under the masthead. It is
+    # chrome, not a sidebar action — it belongs with the other two marks in the
+    # board's top-right corner, and it is rendered there.
 
     # ---- record a movement -------------------------------------------------
     html(cap("Record a movement"))
@@ -874,8 +876,11 @@ with stage:
     # search box — which left two bands of empty page between them and lined
     # nothing up with anything. One row, centred on a common baseline: the
     # search where reading starts, the chrome where it ends.
+    # The button column widened when the theme toggle joined the pair: three
+    # 39px squares plus two 8px gaps need 133px, and at 1.0 of 9.0 the column
+    # was 139px before its own padding, so the third mark wrapped to a new line.
     ctl_search, ctl_c, ctl_btns = st.columns(
-        [3.0, 5.0, 1.0], vertical_alignment="center")
+        [3.0, 4.7, 1.3], vertical_alignment="center")
     with ctl_search:
         # Rendered here, read further down where the filtering happens — the
         # widget writes st.session_state["board_search"] either way, so the
@@ -898,6 +903,16 @@ with stage:
         # space BETWEEN them — as two separate columns they were held apart by
         # the row's own gap plus whatever each column had left over.
         with st.container(key="ll_toolbar"):
+            # Light/dark leads the cluster: it is the one that changes how
+            # everything else looks, and the two beside it open things.
+            if st.button("", key="toggle_theme",
+                         icon=":material/light_mode:" if IS_DARK
+                              else ":material/dark_mode:",
+                         help="Switch to light mode" if IS_DARK
+                              else "Switch to dark mode"):
+                st.session_state.theme_mode = "light" if IS_DARK else "dark"
+                st.query_params["theme"] = st.session_state.theme_mode
+                st.rerun()
             bot_is_open = st.session_state.bot_open
             if st.button("", key="toggle_bot",
                          icon=":material/close:" if bot_is_open else ":material/smart_toy:",

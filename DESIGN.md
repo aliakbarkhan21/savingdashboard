@@ -338,6 +338,14 @@ The picker holds its own widget state, so anything that moves the board without 
 
 **Tabs** are addressed by `[data-testid="stTab"]` and `[aria-selected]`, never by `data-baseweb`. Streamlit moved tabs off BaseWeb onto react-aria and every `[data-baseweb="tab*"]` rule here silently stopped matching — with four tabs on screen those selectors returned zero elements while `[data-testid="stTab"]` returned four. The label sits in a nested markdown container, so type rules go on its `<p>`. This is worth remembering beyond tabs: **dead CSS fails silently**, and the only honest check is to count what a selector matches in a live page.
 
+### Dropdowns
+A dropdown must not behave like a text field. Streamlit renders every `st.selectbox` as a react-aria combobox — a real `<input type="text">` — so clicking one puts a caret in it and typing filters the list; type anything the list does not hold and it says "No results", which reads as broken rather than as a filter that found nothing. Every one of them is therefore `readOnly`, which leaves the dropdown intact (it still focuses, still opens on click, arrow keys and Enter still choose) and removes only the keystrokes.
+
+It is set by a MutationObserver in the parent document, not a one-off pass: Streamlit rebuilds these inputs on rerun, and several never exist at first paint at all — the Settings dialog and the Import tab mount their own later. The cost is that reaching a distant option is now scrolling rather than typing; the command palette is the keyboard route, and it is why losing type-to-filter on the period picker is affordable.
+
+### The Corner Cluster
+Three 39px squares, hard right on the toolbar row, icon-only and unlabelled: theme, Finance Bot, Settings. Light/dark leads, because it changes how everything else looks while the other two open things. They live in one keyed container rather than three columns — as separate columns the space between them was the row's gap plus each column's leftover width, which read as unrelated marks rather than one cluster.
+
 ### Segmented Control
 Two labels over one hidden checkbox, used for the Platform Load panel's Share / Trend switch. Pure CSS, so the swap costs no rerun and no scroll position — the same bargain `.ll-expand` strikes on the ledger columns. The active segment is lit *and* `pointer-events: none`, so clicking the option already showing does nothing.
 
