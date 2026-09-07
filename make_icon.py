@@ -18,7 +18,15 @@ Outputs, all from the same source:
     static/icon-512.png          web app manifest, and the PWA <link rel=icon>
     static/icon-512-maskable.png manifest, purpose=maskable
     static/apple-touch-icon.png  iOS home screen, 180px
-    static/lootledger.ico        the Windows shortcut
+    static/app-icon.ico          the Windows shortcut
+
+The shortcut's icon is `app-icon.ico`, not the `lootledger.ico` this used
+to write. Windows caches a shortcut's icon against the pair (file path,
+index) and will keep serving the bitmap it already has for that pair even
+after the file underneath changes — re-saving the shortcut, bouncing its
+IconLocation off another file and back, and ie4uinit -show all failed to
+shift it. Writing to a path the shell has never seen has no cache entry to
+beat.
 
 The maskable variant is not the same image scaled. Android crops a maskable
 icon to whatever shape the launcher wants — a circle, a squircle, a rounded
@@ -272,8 +280,8 @@ def main() -> int:
     maskable(img).save(STATIC / "icon-512-maskable.png", format="PNG", optimize=True)
     print("  wrote static/icon-512-maskable.png  (512x512, 80% safe zone)")
 
-    write_ico(img, STATIC / "lootledger.ico")
-    print(f"  wrote static/lootledger.ico  ({', '.join(str(s) for s in ICO_SIZES)})")
+    write_ico(img, STATIC / "app-icon.ico")
+    print(f"  wrote static/app-icon.ico  ({', '.join(str(s) for s in ICO_SIZES)})")
     return 0
 
 
