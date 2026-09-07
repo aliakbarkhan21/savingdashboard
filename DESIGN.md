@@ -281,7 +281,9 @@ Light mode's values are deliberately stronger than a naive inversion. Dark ink o
 
 ### Named Rules
 
-**The Press Rule.** A button that does not move under the cursor reads as a picture of a button. `:active` drops it 1px and collapses its shadow; that, plus the 140ms colour transition, is the entire interaction vocabulary. Nothing scales, and nothing animates on load or on rerun.
+**The Press Rule.** Things you can point at move. A card lifts 3px and a button 2px on hover, taking `--lift-2` with them; a button then drops to +1px on press with its shadow collapsed. Up on approach, down on press — that pair is what makes a control feel like an object rather than a picture of one, and card and button agree on how far "raised" is. Nothing scales, and nothing animates on load or on rerun.
+
+The board is deliberately exempt: it is the object the page is about, it already carries the one ambient drop, and a whole page that shrugs when the pointer crosses it reads as loose rather than responsive. Every hover displacement has an explicit `prefers-reduced-motion` exit — the global rule only collapses the duration, so without one the card still jumps the instant it is pointed at.
 
 **The Rules-Not-Borders Rule.** Sections are divided by 1px hairlines that run edge to edge. Only the board, the side panels and form controls carry a full border, and it is always the single strong hairline.
 
@@ -358,6 +360,19 @@ Two things made it wrap: a genuinely narrow rail, and the font swap. Barlow load
 
 ### Panel Fill
 Streamlit columns stretch to the tallest of them; the five divs between a column and a panel do not. A panel that should fill its column takes `.ll-panel-fill`, and the stretch rules hang off that class rather than off a positional `:has(> div > div)` chain — a chain anchored on nothing is what silently stops matching on an upgrade. The emotion wrapper in the middle of that chain centres its child, so it is put back to `stretch`.
+
+### Person Cards
+Open debts rolled up per person, in the Debts tab above the two ledger tables. The two tables are organised the way the data is stored; what you actually settle with someone is one number, the difference between the two directions. Someone can sit on both sides at once, and split across two tables that nets to nothing visible — the card says it, and marks that person "both ways".
+
+Direction is carried by the words ("owes you" / "you owe") and by which edge is lit, never by tinting the card: status hue doing its one job, not a third. Settled debts are excluded — counting them would make someone who always pays you back look identical to someone who never has.
+
+### Arrivals Ring
+The mirror of Platform load, full width beneath the two-column row. Drawn in **amber tints stepped by share**, not in categorical hues: income sources are whoever happened to pay you, not a taxonomy, so giving them their own palette would put hue to a third job and imply a scheme that does not exist. Amber is the board's own light and the arrivals side reads in it.
+
+The colour is emitted in `style`, not the `stroke` attribute — a presentation attribute takes a literal colour and will not resolve a `var()`, which is what a tint is.
+
+### The Setup Strip
+When a setting that changes the reported numbers is missing, the board says so, in the departure tone. This is not onboarding and not a checklist: an unset opening balance does not read as "unset" on screen, it reads as "you have less money than you do", and the figure looks exactly as confident as any other. Each notice clears itself the moment the thing is set, so the strip describes the current state rather than tracking progress.
 
 ### Sparkline
 `theme.trend_svg` — a polyline over a 15%-opacity area fill in the category's own hue, last point marked, 104×26. Each line is scaled to **its own peak**, not a shared one: the question is whether a category is rising against its own past, and a shared scale would answer a different question while flattening every small category into a straight line. The amount beside each row is what makes categories comparable.

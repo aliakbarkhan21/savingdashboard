@@ -58,6 +58,18 @@ so it costs no reload.
 **Net worth.** Cash on hand plus what is owed to you, minus what you owe, beside
 the two figures it is made of.
 
+**Where it came from.** The mirror of Platform load: a ring of the month's
+income by source, drawn in amber rather than category colours because a
+source is whoever paid you, not a category.
+
+**Debts by person.** One card per person with both directions netted, so
+someone you have both lent to and borrowed from shows as a single number.
+
+**It tells you what it has not been told.** An unset opening balance does not
+look unset — it looks like you have less money than you do. The board names
+the settings that are changing its figures, and each notice clears itself
+once the setting is filled.
+
 **Command palette.** Ctrl/Cmd+K to jump to any month, filter the board by
 platform, or open Settings and the bot. The sidebar picker covers every month
 too; the palette is the keyboard route to the same places.

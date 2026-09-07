@@ -789,6 +789,69 @@ with stage:
              'Sample data &mdash; <span>these figures are generated for demonstration, '
              'not real records. Clear them from Settings.</span></div>')
 
+    # ---- settings this board is running without ---------------------------
+    # Several things here only work once they are given one number, and until
+    # now nothing said so — the board simply reported a figure that was wrong
+    # and looked exactly as confident about it as any other. An unset opening
+    # balance does not read as "unset", it reads as "you have less money than
+    # you do". This is the board admitting what it does not know.
+    #
+    # Notices clear themselves the moment the thing is set, so this is not a
+    # checklist to be ticked off; it is a description of the current state.
+    if HAS_DATA and not DEMO_ON and db.get_meta("setup_hint_hidden") != "1":
+        gaps = []
+
+        if not (db.get_meta("opening_balance") or "").strip():
+            # An income row named like a carried balance is the workaround
+            # people reach for when this setting is missing, and it is worth
+            # naming because it does real damage: banked as income it inflates
+            # arrivals and the savings rate for that month, and it never
+            # carries into the months after it the way an opening balance does.
+            carried = [
+                str(r["source"]) for r in frames.income.to_dict("records")
+                if any(w in str(r.get("source", "")).lower()
+                       for w in ("carry forward", "carried", "brought forward",
+                                 "b/f", "opening balance"))
+            ]
+            body = ("The board opens its first month at zero, so cash on hand "
+                    "reads lower than it is and every month after inherits the "
+                    "same shortfall.")
+            if carried:
+                body += (" There is already an income row called "
+                         f"&ldquo;{esc(carried[0])}&rdquo; doing that job — "
+                         "banked as income it inflates that month&rsquo;s "
+                         "arrivals and savings rate instead of seeding the "
+                         "months that follow.")
+            gaps.append(("Opening balance is not set", body))
+
+        if not db.get_budgets() and snap.by_category is not None                 and not snap.by_category.empty:
+            gaps.append((
+                "No category budgets",
+                "Platform load draws a cap bar under any category that has "
+                "one, and the status lamp reads the same 70% and 90% "
+                "thresholds. Without a single cap set, both are running on "
+                "the overall figure alone."))
+
+        if gaps:
+            rows = "".join(
+                f'<div class="ll-setup-item"><b>{esc(t)}</b> {b}</div>'
+                for t, b in gaps)
+            html('<div class="ll-setup">',
+                 f'<div class="ll-since-title">{icons.icon("alert", 14)}'
+                 f'{"Two settings" if len(gaps) > 1 else "One setting"} '
+                 'would change what the board reports</div>',
+                 rows, '</div>')
+            g1, g2, _g3 = st.columns([1.1, 1.1, 4], vertical_alignment="center")
+            with g1:
+                if st.button("Open Settings", key="setup_open",
+                             type="primary", width="stretch"):
+                    st.session_state._open_settings = True
+                    st.rerun()
+            with g2:
+                if st.button("Not now", key="setup_hide", width="stretch"):
+                    db.set_meta("setup_hint_hidden", "1")
+                    st.rerun()
+
     # ---- monthly digest: one bot call on the first load of a new month -----
     # Set to last month's period key when a digest still needs generating; the
     # actual call runs at the very bottom of this script so it cannot delay the
@@ -921,6 +984,11 @@ with stage:
                 st.rerun()
             settings_open = st.button("", key="open_settings",
                                       icon=":material/settings:", help="Settings")
+    # The setup strip above also opens it. It sits higher up the script than
+    # this button, so it cannot return into `settings_open` directly — it parks
+    # a flag and this run picks it up.
+    if st.session_state.pop("_open_settings", False):
+        settings_open = True
 
     # ================================================================ board
     status_word = {"on-time": "On track", "delayed": "Running warm",
@@ -1394,12 +1462,28 @@ with stage:
             daily_burn = snap.outflow / days_elapsed if days_elapsed else 0.0
             projected_close = snap.on_hand - daily_burn * days_remaining
             close_tone = "var(--departure)" if projected_close < 0 else "var(--ink-2)"
+            # A rate with nothing beside it says very little: only someone who
+            # already knows their own habits can read "Rs. 400 a day" as fast
+            # or slow. The baseline is every completed month before this one.
+            usual = finance.usual_daily_outflow(series, snap.key)
+            versus = ""
+            if usual:
+                delta = (daily_burn - usual) / usual * 100.0
+                if abs(delta) < 5:
+                    versus = (' That is about your usual pace of '
+                              f'<b>{finance.money(usual, 0)}</b>/day.')
+                else:
+                    word = "above" if delta > 0 else "below"
+                    tone = "var(--departure)" if delta > 0 else "var(--arrival)"
+                    versus = (f' That is <b style="color:{tone}">{abs(delta):.0f}% '
+                              f'{word}</b> your usual '
+                              f'<b>{finance.money(usual, 0)}</b>/day.')
             projection_html = (
                 '<div class="ll-meter-foot">Pacing at '
                 f'<b>{finance.money(daily_burn, 0)}</b>/day &mdash; projected to close the '
                 f'month at <b style="color:{close_tone}">'
                 f'{finance.money(projected_close, 0)}</b> with {days_remaining} '
-                f'day{"s" if days_remaining != 1 else ""} left.</div>'
+                f'day{"s" if days_remaining != 1 else ""} left.{versus}</div>'
             )
 
         html('<div class="ll-panel"><div class="ll-panel-head">',
@@ -1438,6 +1522,44 @@ with stage:
              f'<div class="ll-oblig-value">{finance.money(snap.net_worth, 0)}</div>',
              '<div class="ll-oblig-note">cash + owed to you &minus; you owe</div></div>',
              '</div></div>')
+
+    # ---- where the money came from ----------------------------------------
+    # The mirror of Platform load. Every income row has carried a source since
+    # the first version and nothing grouped them, so the board could say where
+    # the money went in eight ways and where it came from in none.
+    #
+    # Full width rather than a third panel in either column: the two-column row
+    # above is balanced, and dropping this into one side would strand the other.
+    sources = finance.income_by_source(frames, snap.key)
+    if not sources.empty:
+        spacer(16)
+        src_total = float(sources["amount"].sum()) or 1.0
+        recs = sources.to_dict("records")
+        ring = theme.donut_svg(
+            recs, src_total,
+            center_label=finance.money_compact(src_total),
+            amount_fmt=lambda v: finance.money(v, 0),
+            color_for=theme.amber_tints, key="source",
+            label="Arrivals by source", center_sub="arrived")
+        rows = []
+        for i, r in enumerate(recs):
+            name = str(r["source"])
+            got = float(r["amount"])
+            rows.append(
+                '<div class="ll-src-item">'
+                f'<span class="ll-src-dot" style="background:'
+                f'{theme.amber_tints(name, i, len(recs))}"></span>'
+                f'<div class="ll-load-name">{esc(name)}</div>'
+                f'<div class="ll-load-pct">{got / src_total * 100:.0f}%</div>'
+                f'<div class="ll-load-amt">{finance.money(got, 0)}</div>'
+                '</div>')
+        html('<div class="ll-panel"><div class="ll-panel-head">',
+             f'<div class="ll-panel-title">{icons.icon("arrival", 15)}'
+             'Where it came from</div>',
+             f'<div class="ll-col-sum">{finance.money(src_total, 0)}</div>',
+             '</div><div class="ll-panel-body"><div class="ll-load">',
+             f'<div class="ll-donut-wrap">{ring}</div>',
+             '<div class="ll-load-list">', *rows, '</div></div></div></div>')
 
     # ---- the run strip -----------------------------------------------------
     if HAS_DATA and len(series) > 1:
@@ -1617,6 +1739,48 @@ with stage:
                         st.caption("Nothing changed.")
 
         with t_debt:
+            # ---- who, before what ------------------------------------------
+            # The two tables below are organised by ledger, which is how the
+            # data is stored and not how the debt is actually settled. What you
+            # hand over to someone is one number: the difference between what
+            # they owe you and what you owe them. Someone can sit on both sides
+            # at once — you covered their taxi in March, they bought your router
+            # in August — and split across two tables that nets to nothing
+            # visible. This is the only place the board says it.
+            people = finance.people_ledger(frames)
+            if people:
+                st.markdown("**By person**")
+                cards = []
+                for b in people:
+                    net = b["net"]
+                    if abs(net) < 0.005:
+                        tone, verdict = "is-square", "square"
+                    elif net > 0:
+                        tone, verdict = "is-in", f"owes you {finance.money(net, 0)}"
+                    else:
+                        tone, verdict = "is-out", f"you owe {finance.money(-net, 0)}"
+                    both = ('<span class="ll-person-both">both ways</span>'
+                            if b["both_ways"] else "")
+                    detail = []
+                    if b["owed_to_you"]:
+                        detail.append(f'out {finance.money(b["owed_to_you"], 0)}')
+                    if b["you_owe"]:
+                        detail.append(f'in {finance.money(b["you_owe"], 0)}')
+                    detail.append(f'{b["rows"]} open')
+                    detail.append(f'oldest {b["oldest_days"]}d')
+                    cards.append(
+                        f'<div class="ll-person {tone}">'
+                        f'<div class="ll-person-name">{esc(b["name"])}{both}</div>'
+                        f'<div class="ll-person-net">{verdict}</div>'
+                        f'<div class="ll-person-sub">{esc(" · ".join(detail))}</div>'
+                        '</div>')
+                html('<div class="ll-people">', *cards, '</div>')
+                st.caption("Open debts only — a settled one is a closed "
+                           "conversation, and counting it would make someone "
+                           "who always pays you back look like someone who "
+                           "never has.")
+                st.divider()
+
             st.caption("Ticking Settled records the repayment as today's cash movement, "
                        "so it lands in this month's figures. **How** says whether "
                        "cash moved when the debt started — change it here if one "

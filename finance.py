@@ -51,6 +51,7 @@ net worth do not look at `kind` at all. Only cash on hand does.
 """
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -558,6 +559,94 @@ def category_series(frames: Frames, keys: list[str]) -> dict[str, list[float]]:
                   for r in _category_totals(frames, k)} for k in keys]
     names = sorted({c for month in per_month for c in month})
     return {name: [month.get(name, 0.0) for month in per_month] for name in names}
+
+
+def income_by_source(frames: Frames, key: str) -> pd.DataFrame:
+    """Arrivals grouped by the source they were logged under.
+
+    The mirror of `_category_totals`. Every income row has carried a `source`
+    since the first version and nothing has ever grouped them, so "where does
+    my money actually come from" was a question the board held the data for and
+    could not answer.
+    """
+    inc = _in_period(frames.income, key)
+    if inc.empty:
+        return pd.DataFrame()
+    return (inc.groupby("source", as_index=False)["amount"].sum()
+               .sort_values("amount", ascending=False)
+               .reset_index(drop=True))
+
+
+def _days_outstanding(value) -> int:
+    try:
+        started = datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return 0
+    return max(0, (date.today() - started).days)
+
+
+def people_ledger(frames: Frames) -> list[dict]:
+    """Open debts rolled up per person, with both directions netted.
+
+    One person can sit on both sides at once — you covered their taxi in March,
+    they bought your router in August — and the board showed that as rows in two
+    separate tables with the net position nowhere. Netting is the whole point:
+    what you actually settle with someone is the difference.
+
+    Only unsettled rows count. A settled debt is a closed conversation, and
+    including it would make a person who has always paid you back on time look
+    identical to one who never has.
+    """
+    people: dict[str, dict] = {}
+
+    def bucket(name: str) -> dict:
+        return people.setdefault(name, {
+            "name": name, "owed_to_you": 0.0, "you_owe": 0.0,
+            "rows": 0, "oldest_days": 0,
+        })
+
+    for table, who, field in (("lent", "person", "owed_to_you"),
+                              ("borrowed", "lender", "you_owe")):
+        df = getattr(frames, table)
+        if df.empty:
+            continue
+        for r in df[df["paid_back"] == 0].to_dict("records"):
+            name = str(r.get(who) or "").strip() or "Unnamed"
+            b = bucket(name)
+            b[field] += float(r["amount"])
+            b["rows"] += 1
+            b["oldest_days"] = max(b["oldest_days"], _days_outstanding(r["date"]))
+
+    for b in people.values():
+        b["net"] = b["owed_to_you"] - b["you_owe"]
+        b["both_ways"] = b["owed_to_you"] > 0 and b["you_owe"] > 0
+    # Largest obligation first, either direction — the biggest number is the one
+    # worth acting on whichever way it points.
+    return sorted(people.values(), key=lambda b: -abs(b["net"]))
+
+
+def usual_daily_outflow(series: dict, key: str) -> float | None:
+    """Spend per day across the completed months before `key`.
+
+    The Capacity panel already projects where the month closes from the current
+    burn, but a rate with nothing to compare it against says very little: only
+    someone who already knows their own habits can read "Rs. 400 a day" as fast
+    or slow. This is the baseline that makes it legible.
+
+    Returns None when there is no completed month to average — one month of
+    history is not a habit, and inventing a baseline from it would be worse
+    than saying nothing.
+    """
+    earlier = [k for k in sorted(series) if k < key and series[k].outflow > 0]
+    if not earlier:
+        return None
+    days = 0
+    spent = 0.0
+    for k in earlier:
+        year, month = int(k[:4]), int(k[5:7])
+        days += calendar.monthrange(year, month)[1]
+        spent += series[k].outflow
+    return (spent / days) if days else None
 
 
 def _arrivals(frames: Frames, key: str) -> pd.DataFrame:

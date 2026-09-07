@@ -96,11 +96,31 @@ def platform_code(name: str) -> str:
     return PLATFORM_CODES.get(name, (name[:2] or "??").upper())
 
 
-def chart_sequence(names) -> list:
-    return [platform_color(n) for n in names]
+def _platform_arc(name, _i=0, _n=0) -> str:
+    """donut_svg's colour hook for the spending ring."""
+    return platform_color(name)
 
 
-def donut_svg(records, total, center_label="", size=184, thickness=24, amount_fmt=None):
+def amber_tints(_name=None, i: int = 0, n: int = 1) -> str:
+    """donut_svg's colour hook for the arrivals ring: one hue, stepped by share.
+
+    Income sources are not a taxonomy the way spending categories are — they
+    are whoever happened to pay you — so giving them their own categorical
+    palette would put hue to a third job, which the Two Jobs Rule forbids and
+    which would also make "Dada" and "Salary" look like they belong to some
+    scheme they do not. Amber is the board's own light and the arrivals side
+    reads in it; the step encodes share, which is the only thing that ranks.
+    """
+    top, bottom = 0.95, 0.30
+    if n <= 1:
+        return f"rgba(var(--amber-rgb),{top})"
+    step = (top - bottom) / (n - 1)
+    return f"rgba(var(--amber-rgb),{top - i * step:.3f})"
+
+
+def donut_svg(records, total, center_label="", size=184, thickness=24,
+              amount_fmt=None, color_for=None, key="category",
+              label="Spending by platform", center_sub="spent"):
     """Inline SVG donut for spending-by-platform.
 
     Styled to match the board rather than a chart library's default: a
@@ -113,6 +133,7 @@ def donut_svg(records, total, center_label="", size=184, thickness=24, amount_fm
     if not records or total <= 0:
         return ""
     amount_fmt = amount_fmt or (lambda v: f"{v:,.0f}")
+    color_for = color_for or _platform_arc
     radius = (size - thickness) / 2
     circumference = 2 * math.pi * radius
     cx = cy = size / 2
@@ -120,18 +141,23 @@ def donut_svg(records, total, center_label="", size=184, thickness=24, amount_fm
     seam = max(circumference * 0.006, 1.0)
 
     arcs = []
-    for r in records:
+    for i, r in enumerate(records):
         amount = float(r["amount"])
         frac = amount / total if total else 0.0
         length = frac * circumference
         seg_len = max(length - seam, 0.0)
-        colour = platform_color(str(r["category"]))
+        name = str(r[key])
+        # The colour goes in `style`, not the `stroke` attribute: a
+        # presentation attribute takes a literal colour and will not resolve a
+        # var(), and the income ring is drawn in amber tints that are exactly
+        # that. The track below has always done it this way for the same reason.
+        colour = color_for(name, i, len(records))
         arcs.append(
             f'<circle cx="{cx}" cy="{cy}" r="{radius:.2f}" fill="none" '
-            f'stroke="{colour}" stroke-width="{thickness}" stroke-linecap="butt" '
+            f'style="stroke:{colour}" stroke-width="{thickness}" stroke-linecap="butt" '
             f'stroke-dasharray="{seg_len:.2f} {circumference - seg_len:.2f}" '
             f'stroke-dashoffset="{-cursor:.2f}" transform="rotate(-90 {cx} {cy})">'
-            f'<title>{esc(str(r["category"]))}: {esc(amount_fmt(amount))} '
+            f'<title>{esc(name)}: {esc(amount_fmt(amount))} '
             f'({frac * 100:.0f}%)</title></circle>'
         )
         cursor += length
@@ -145,11 +171,11 @@ def donut_svg(records, total, center_label="", size=184, thickness=24, amount_fm
         f'<text x="{cx}" y="{cy + size * 0.005:.2f}" text-anchor="middle" '
         f'class="ll-donut-total">{esc(center_label)}</text>'
         f'<text x="{cx}" y="{cy + size * 0.115:.2f}" text-anchor="middle" '
-        f'class="ll-donut-label">spent</text>'
+        f'class="ll-donut-label">{esc(center_sub)}</text>'
     ) if center_label else ""
 
     return (f'<svg class="ll-donut" width="{size}" height="{size}" '
-            f'viewBox="0 0 {size} {size}" role="img" aria-label="Spending by platform">'
+            f'viewBox="0 0 {size} {size}" role="img" aria-label="{esc(label)}">'
             f'{track}{"".join(arcs)}{center}</svg>')
 
 
@@ -912,6 +938,27 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   background: var(--panel); border: 1px solid var(--rule-2);
   border-radius: var(--radius-lg); overflow: hidden;
 }
+/* Cards lift under the cursor. This is a state transition on direct
+   interaction, which is the one kind of motion this product allows besides the
+   flap settle — nothing here animates on load or on rerun, and nothing scales.
+   The board itself is deliberately NOT in this list: it is the object the whole
+   page is about, it already carries the one ambient drop, and a page that
+   shrugs when the pointer crosses it reads as loose rather than responsive. */
+.ll-panel, .ll-person {
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease),
+              border-color 160ms var(--ease);
+  will-change: transform;
+}
+.ll-panel:hover, .ll-person:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--lift-2);
+  border-color: rgba(var(--ink-rgb), calc(var(--rule-2-a) + 0.10));
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The global rule only collapses the duration; the displacement itself has
+     to go, or the card still jumps 3px the instant it is pointed at. */
+  .ll-panel:hover, .ll-person:hover { transform: none !important; }
+}
 .ll-panel-head {
   display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
   padding: var(--s3) var(--s4); border-bottom: 1px solid var(--rule);
@@ -956,6 +1003,18 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 }
 .ll-load-list { flex: 0 1 auto; min-width: 0; max-width: 380px; width: 100%;
                 display: flex; flex-direction: column; gap: 0; }
+/* Arrivals rows carry a swatch, not a two-letter chip: a source is whoever
+   paid you, not a platform with a fixed code in the map. Same grid otherwise. */
+.ll-src-item {
+  display: grid; grid-template-columns: 30px minmax(0,1fr) auto auto;
+  align-items: center; gap: var(--s3);
+  padding: 7px 0; border-bottom: 1px solid var(--rule);
+}
+.ll-src-item:last-child { border-bottom: none; }
+.ll-src-dot {
+  width: 12px; height: 12px; border-radius: var(--radius-tile);
+  display: inline-block; justify-self: center;
+}
 .ll-load-item {
   display: grid; grid-template-columns: 30px 1fr auto auto; align-items: center;
   gap: var(--s3); padding: 7px 0; border-bottom: 1px solid var(--rule);
@@ -1125,6 +1184,41 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+/* ---- debts, rolled up per person ---------------------------------------
+   Direction is carried by the word ("owes you" / "you owe") and by which edge
+   is lit, never by tinting the card — the Two Jobs Rule holds here as much as
+   on the board. The edge is the status hue doing its one job. */
+.ll-people {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--s2); margin-bottom: var(--s2);
+}
+.ll-person {
+  background: var(--panel-2); border: 1px solid var(--rule-2);
+  border-left: 2px solid var(--ink-3);
+  border-radius: var(--radius); padding: 10px var(--s3);
+}
+.ll-person.is-in { border-left-color: var(--arrival); }
+.ll-person.is-out { border-left-color: var(--departure); }
+.ll-person.is-square { border-left-color: var(--ink-3); }
+.ll-person-name {
+  font-size: var(--t-small); font-weight: 600; color: var(--ink);
+  display: flex; align-items: center; gap: 7px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ll-person-both {
+  font-size: var(--t-micro); font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--amber);
+  border: 1px solid var(--amber-24); border-radius: var(--radius-tile);
+  padding: 1px 5px; flex: 0 0 auto;
+}
+.ll-person-net {
+  font-family: var(--font-board); font-size: var(--t-h3); font-weight: 700;
+  color: var(--ink); margin-top: 3px;
+}
+.ll-person-sub {
+  font-size: var(--t-micro); color: var(--ink-3); margin-top: 2px;
 }
 
 /* ---- utilisation meter ---- */
@@ -1373,6 +1467,23 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   border-radius: var(--radius); background: var(--shade-soft);
   padding: var(--s3) var(--s4); margin-bottom: var(--s3);
 }
+/* The board naming what it has not been told. Same idiom as .ll-since, in the
+   departure tone rather than amber, because this is not news — it is a figure
+   on screen being reported as more certain than it is. */
+.ll-setup {
+  border: 1px solid var(--rule-2); border-left: 2px solid var(--departure);
+  border-radius: var(--radius); background: var(--shade-soft);
+  padding: var(--s3) var(--s4); margin-bottom: var(--s2);
+}
+.ll-setup .ll-since-title .ll-icon { color: var(--departure); }
+.ll-setup-item {
+  font-size: var(--t-small); color: var(--ink-2); line-height: 1.55;
+  padding: 4px 0;
+}
+.ll-setup-item + .ll-setup-item { border-top: 1px solid var(--rule); margin-top: 4px; }
+.ll-setup-item b { color: var(--ink); font-weight: 600; }
+.st-key-setup_open, .st-key-setup_hide { margin-bottom: var(--s3); }
+
 .ll-since-title {
   font-family: var(--font-board); font-size: var(--t-micro); font-weight: 700;
   letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3);
@@ -1475,14 +1586,28 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   border-color: var(--amber) !important;
   color: var(--amber) !important;
   box-shadow: var(--lift-2) !important;
+  transform: translateY(-2px) !important;
 }
-/* A button that does not move under the cursor reads as a picture of a
-   button. One pixel and the shadow collapsing is the whole effect. */
+/* Up on approach, down on press. The pair is what makes a button feel like an
+   object rather than a picture of one, and it is the same two pixels the cards
+   move — a control and a card should not disagree about how far "raised" is.
+   :active is written after :hover deliberately: it matches while hovering too,
+   and equal specificity means source order is what settles the press. */
 .stButton button:active, .stFormSubmitButton button:active,
 [data-testid="stDownloadButton"] button:active,
 [data-testid="stPopover"] > div > button:active {
   transform: translateY(1px) !important;
   box-shadow: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stButton button:hover, .stFormSubmitButton button:hover,
+  [data-testid="stDownloadButton"] button:hover,
+  [data-testid="stPopover"] > div > button:hover,
+  .stButton button:active, .stFormSubmitButton button:active,
+  [data-testid="stDownloadButton"] button:active,
+  [data-testid="stPopover"] > div > button:active {
+    transform: none !important;
+  }
 }
 .stButton button p, .stFormSubmitButton button p, [data-testid="stDownloadButton"] button p {
   font-weight: 600 !important; -webkit-text-fill-color: currentColor !important;

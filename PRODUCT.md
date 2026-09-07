@@ -141,6 +141,29 @@ bars are not missed: the run strip already draws the same twelve months larger. 
 general rule that came out of it — if a navigation control has to be truncated to fit, it
 is the wrong control.
 
+**The board says what it has not been told.** Several features only work once given
+one number, and until now nothing said so — an unset opening balance simply reported a
+cash position that was wrong, with no less confidence than any other figure. A strip near
+the top names the gaps (opening balance, category budgets) and clears each as it is
+filled. It also recognises the workaround: an income row named like a carried balance
+("Carry Forward — July") is doing the opening balance's job in a way that inflates that
+month's arrivals and savings rate and never carries into the months after.
+
+**Debts, per person.** `lent.person` and `borrowed.lender` were stored from the start and
+grouped nowhere. The Debts tab now opens with one card per person, both directions netted
+— someone can sit on both sides at once, and across two tables that nets to nothing
+visible. Open debts only.
+
+**Where the money came from.** `income.source` was captured on every row and never
+grouped, so the board could say where money went in eight ways and where it came from in
+none. A full-width ring mirrors Platform load, drawn in amber tints rather than
+categorical hues — sources are not a taxonomy, and a third job for colour is a bug.
+
+**A baseline for the burn rate.** The Capacity projection reported a daily pace with
+nothing to compare it against, which only someone who already knew their habits could
+read. It now sets that rate against the average across every completed month, and says
+nothing at all when there is no completed month — one month of history is not a habit.
+
 **Command palette (Ctrl/Cmd+K).** Jump to any month, filter the board by platform, open
 Settings or the bot. Every month gets a palette entry and an off-screen button; the
 palette clicks it rather than writing state itself, so a choice is an ordinary widget
