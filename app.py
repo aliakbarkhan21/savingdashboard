@@ -726,16 +726,18 @@ with st.sidebar:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # No flex spacer above this. It existed to hold the credit at the foot of
-    # the panel, which on a short window put it below the fold — the sidebar ran
-    # to 689px and anything under about 695px of viewport scrolled. It now
-    # follows the picker directly.
-    html('<div style="margin-top:var(--s3);',
-         'border-top:1px solid var(--rule);padding-top:12px;',
-         'font-size:0.6875rem;color:var(--ink-3);letter-spacing:0.06em;',
-         'text-align:center;">',
-         'Built by <a href="https://www.linkedin.com/in/muhammad-ali-akbar-khan-7b37b8197" ',
-         'target="_blank" rel="noopener">Muhammad Ali Akbar</a></div>')
+    # The credit sits at the foot of the panel, held there by margin-top:auto
+    # on this container — see theme.py. It used to be pushed down by a spacer
+    # div, which did nothing: the div was wrapped in Streamlit's own markdown
+    # containers, so its flex:1 applied inside a wrapper that was not the flex
+    # column and never grew. Adding no height of its own, `auto` cannot push
+    # anything past the fold the way that arrangement did.
+    with st.container(key="ll_credit"):
+        html('<div style="border-top:1px solid var(--rule);padding-top:12px;',
+             'font-size:0.6875rem;color:var(--ink-3);letter-spacing:0.06em;',
+             'text-align:center;">',
+             'Built by <a href="https://www.linkedin.com/in/muhammad-ali-akbar-khan-7b37b8197" ',
+             'target="_blank" rel="noopener">Muhammad Ali Akbar</a></div>')
 
 
 # ================================================================== layout

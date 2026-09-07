@@ -1,131 +1,150 @@
 """
-Builds `static/lootledger.ico` — the LL monogram, for the Windows shortcut.
+Builds every shipped icon from one square source image.
 
-Why this is not one PNG handed to Pillow with a `sizes=` list: that path renders
-the mark once and downsamples it for every entry, and the monogram does not
-survive that. At 16 pixels the gap between the two L's is under one pixel wide,
-so a straight downscale fuses them into an amber blob with a grey seam. Windows
-picks the 16px entry for the taskbar and for details view, which is where a
-desktop icon is looked at most.
+    python make_icon.py path/to/logo.png
 
-So every size is drawn on its own. The geometry is expressed as fractions of the
-canvas, measured off `static/icon-512.png` so this matches the shipped mark
-exactly rather than approximating it, and each rectangle is then rounded to whole
-pixels AT THE TARGET SIZE before anything is drawn. Rounding first is the whole
-trick: the stems and feet land on exact pixel boundaries, so they come out sharp
-instead of smeared across two columns at half opacity. Drawing happens at 8x and
-is filtered back down, which keeps the rounded corner smooth while those snapped
-edges stay crisp — supersampling for the curve, pixel-snapping for the glyph.
+This replaced a script that DREW the old LL monogram size by size, in code,
+because a monogram is two thin rectangles and a straight downscale fused them
+into a blob at 16px. That reasoning does not carry over: the mark is now a
+photographic-looking illustration with no hairline geometry to protect, so the
+honest approach is one high-resolution source filtered down with a good kernel.
+What survives from the old script is the ICO container written by hand — see
+below for why Pillow's own writer is not used.
 
-Small sizes also get a floor applied: a stem is never thinner than 2px and the
-gap between the letters never closes below 1px, because below that the mark stops
-being two letters and there is no point in it at all.
+Outputs, all from the same source:
 
-Run:  python make_icon.py
+    static/favicon-64.png        the browser tab (st.set_page_config)
+    static/icon-192.png          web app manifest
+    static/icon-512.png          web app manifest, and the PWA <link rel=icon>
+    static/icon-512-maskable.png manifest, purpose=maskable
+    static/apple-touch-icon.png  iOS home screen, 180px
+    static/lootledger.ico        the Windows shortcut
+
+The maskable variant is not the same image scaled. Android crops a maskable
+icon to whatever shape the launcher wants — a circle, a squircle, a rounded
+square — and only the middle 80% is guaranteed to survive. A mark that already
+fills its own frame loses its border to that crop, so this one is inset to 80%
+on a solid ground and the crop eats the padding instead of the artwork.
 """
 from __future__ import annotations
 
 import struct
+import sys
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 HERE = Path(__file__).parent
-OUT = HERE / "static" / "lootledger.ico"
+STATIC = HERE / "static"
 
-VOID = (7, 9, 12, 255)        # --void, dark mode
-AMBER = (255, 179, 0, 255)    # --amber, dark mode
+# The manifest's background_color, so the maskable pad is invisible against the
+# ground the launcher composites it on.
+GROUND = (7, 9, 12, 255)
 
-# Fractions of the canvas, measured from static/icon-512.png:
-#   corner radius 73        glyph x 103..408, y 138..373
-#   stems 55 wide at x=103 and x=270, feet 139 wide, foot top at y=320
-RADIUS = 73 / 512
-GLYPH_X = 103 / 512
-STEM_W = 55 / 512
-RIGHT_X = 270 / 512
-GLYPH_TOP = 138 / 512
-GLYPH_BOT = 374 / 512
-FOOT_TOP = 320 / 512
-FOOT_W = 139 / 512
+PNGS = {
+    "favicon-64.png": 64,
+    "icon-192.png": 192,
+    "icon-512.png": 512,
+    "apple-touch-icon.png": 180,
+}
 
-SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
-SS = 8   # supersample factor
+# Windows picks 16px for the taskbar and details view and 256px for the large
+# preview; the sizes between are what Explorer's other view modes reach for.
+ICO_SIZES = (16, 20, 24, 32, 40, 48, 64, 96, 128, 256)
 
 
-def render(size: int) -> Image.Image:
-    """One icon entry, drawn for this size rather than scaled down to it."""
-    # --- lay the mark out in whole target pixels first ---
-    x0 = round(GLYPH_X * size)
-    stem = max(2, round(STEM_W * size))
-    foot = max(stem + 1, round(FOOT_W * size))
-    top = round(GLYPH_TOP * size)
-    bot = round(GLYPH_BOT * size)
-    foot_top = round(FOOT_TOP * size)
-    rx = round(RIGHT_X * size)
+def load_square(path: Path) -> Image.Image:
+    """Open the source and return it square, RGBA, without distorting it.
 
-    # Keep the letters apart. Without this the left foot grows into the right
-    # stem at 16 and 20px and the mark reads as one wide glyph.
-    if rx <= x0 + foot:
-        rx = x0 + foot + 1
-    # ...and keep the whole thing on the canvas after that nudge.
-    overflow = (rx + foot) - (size - x0)
-    if overflow > 0:
-        x0 = max(1, x0 - overflow)
-        rx -= overflow
+    A source that is not square is centre-cropped rather than stretched: an
+    icon squashed to fit reads as a mistake at every size it is then rendered.
+    """
+    img = Image.open(path).convert("RGBA")
+    w, h = img.size
+    if w != h:
+        side = min(w, h)
+        left, top = (w - side) // 2, (h - side) // 2
+        img = img.crop((left, top, left + side, top + side))
+    return img
 
-    # A foot only reads as a foot if it is at least a pixel tall.
-    if bot - foot_top < 1:
-        foot_top = bot - 1
 
-    img = Image.new("RGBA", (size * SS, size * SS), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    d.rounded_rectangle([0, 0, size * SS - 1, size * SS - 1],
-                        radius=RADIUS * size * SS, fill=VOID)
-    for left in (x0, rx):
-        # stem, then foot — both on target-pixel boundaries, scaled up to draw
-        d.rectangle([left * SS, top * SS,
-                     (left + stem) * SS - 1, bot * SS - 1], fill=AMBER)
-        d.rectangle([left * SS, foot_top * SS,
-                     (left + foot) * SS - 1, bot * SS - 1], fill=AMBER)
+def resized(img: Image.Image, size: int) -> Image.Image:
     return img.resize((size, size), Image.LANCZOS)
 
 
-def write_ico(images: list[Image.Image], path: Path) -> None:
-    """Assemble the .ico by hand.
+def maskable(img: Image.Image, size: int = 512, safe: float = 0.8) -> Image.Image:
+    """The mark inset into the safe zone, on the manifest's own ground."""
+    inner = int(round(size * safe))
+    out = Image.new("RGBA", (size, size), GROUND)
+    art = resized(img, inner)
+    off = (size - inner) // 2
+    out.paste(art, (off, off), art)
+    return out
 
-    Pillow's own ICO writer re-derives every entry from a single image, which is
-    exactly what this file exists to avoid. The container is simple enough to
-    write directly: a header, one 16-byte directory entry per size, then the
-    payloads. Each payload is a PNG — Windows has accepted PNG-compressed
-    entries since Vista, and it keeps the 256px entry from costing 256KB as raw
-    BMP would.
+
+def write_ico(img: Image.Image, out: Path, sizes=ICO_SIZES) -> None:
+    """Write a multi-resolution ICO by hand.
+
+    Pillow's own ICO writer silently drops entries above 256px and reorders
+    what it keeps, and the order matters: Windows walks the directory and takes
+    the first entry that satisfies the size it wants, so a badly ordered file
+    gets a 256px image scaled down for a 16px slot. Writing the container
+    directly is about forty lines and removes the guesswork.
+
+    Every entry is a PNG payload, which Windows has understood since Vista and
+    which keeps the alpha channel intact without a mask bitmap.
     """
     payloads = []
-    for im in images:
+    for s in sizes:
         buf = BytesIO()
-        im.save(buf, format="PNG", optimize=True)
-        payloads.append(buf.getvalue())
+        resized(img, s).save(buf, format="PNG", optimize=True)
+        payloads.append((s, buf.getvalue()))
 
-    header = struct.pack("<HHH", 0, 1, len(images))   # reserved, type=icon, count
-    offset = len(header) + 16 * len(images)
-    entries = b""
-    for im, data in zip(images, payloads):
-        w = 0 if im.width >= 256 else im.width       # 0 encodes 256
-        h = 0 if im.height >= 256 else im.height
-        entries += struct.pack("<BBBBHHII", w, h, 0, 0, 1, 32, len(data), offset)
+    # ICONDIR: reserved(0), type(1 = icon), count
+    header = struct.pack("<HHH", 0, 1, len(payloads))
+    offset = len(header) + 16 * len(payloads)
+    entries, blobs = [], []
+    for s, data in payloads:
+        # 256 is stored as 0 in a single byte — the field is one byte wide and
+        # 256 does not fit in it.
+        dim = 0 if s >= 256 else s
+        entries.append(struct.pack(
+            "<BBBBHHII", dim, dim, 0, 0, 1, 32, len(data), offset))
+        blobs.append(data)
         offset += len(data)
+    out.write_bytes(header + b"".join(entries) + b"".join(blobs))
 
-    path.write_bytes(header + entries + b"".join(payloads))
 
+def main() -> int:
+    if len(sys.argv) < 2:
+        print(__doc__.strip().splitlines()[2].strip())
+        print("\nPass the source image, e.g.:\n"
+              "  python make_icon.py logo.png")
+        return 2
+    src = Path(sys.argv[1]).expanduser()
+    if not src.exists():
+        print(f"No such file: {src}")
+        return 1
 
-def main() -> None:
-    images = [render(s) for s in SIZES]
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    write_ico(images, OUT)
-    print(f"wrote {OUT}  ({OUT.stat().st_size:,} bytes)")
-    print("sizes:", ", ".join(f"{s}x{s}" for s in SIZES))
+    img = load_square(src)
+    w, _ = img.size
+    if w < 512:
+        print(f"! source is only {w}px — 512 or larger keeps the large "
+              f"previews sharp. Continuing anyway.")
+
+    STATIC.mkdir(exist_ok=True)
+    for name, size in PNGS.items():
+        resized(img, size).save(STATIC / name, format="PNG", optimize=True)
+        print(f"  wrote static/{name}  ({size}x{size})")
+
+    maskable(img).save(STATIC / "icon-512-maskable.png", format="PNG", optimize=True)
+    print("  wrote static/icon-512-maskable.png  (512x512, 80% safe zone)")
+
+    write_ico(img, STATIC / "lootledger.ico")
+    print(f"  wrote static/lootledger.ico  ({', '.join(str(s) for s in ICO_SIZES)})")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

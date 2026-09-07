@@ -590,14 +590,33 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
    separate whole regions. In the sidebar they separate two short groups in a
    panel that has to fit a laptop window, and 24px twice over was most of a row. */
 [data-testid="stSidebar"] .ll-cap { margin-top: var(--s4); }
+/* The credit rides to the bottom of the sidebar column. margin-top:auto in a
+   flex column consumes free space only — it adds no height of its own, so it
+   cannot push the credit past the fold on a short window the way the old
+   spacer div was meant to and a real spacer would.
+   
+   It goes on the LAYOUT WRAPPER, not on .st-key-ll_credit itself. Streamlit
+   inserts a stLayoutWrapper between a keyed container and the block above it,
+   so the keyed element is a grandchild of the flex column and not a flex item
+   of it — `auto` there has no free space to consume and resolves to 0, which is
+   exactly what it did: the rule applied, computed to 0px, and nothing moved. */
+[data-testid="stSidebar"] [data-testid="stLayoutWrapper"]:has(> .st-key-ll_credit) {
+  margin-top: auto !important;
+}
 [data-testid="stSidebar"] hr { border-color: var(--rule) !important; margin: var(--s3) 0 !important; }
 
 /* ------------------------------------------------------- masthead */
 /* The wordmark is the one thing in this panel that should be large; it was set
-   smaller than the board's own service period, which read as timid. It grows
-   downward only — line-height stays below 1 and the container's 10px top
-   padding is untouched, so the gap above it does not move. */
-.ll-mast { margin-bottom: var(--s4); }
+   smaller than the board's own service period, which read as timid.
+   
+   It starts below the collapse arrow rather than beside it. The arrow is 32x28
+   in the top-right corner and its bottom edge is at y=36; the title needs the
+   full 207px of content width to hold "LOOT · LEDGER" on one line at this size,
+   so there is no room to sit alongside it — reserving the arrow's column drops
+   the largest fitting size to 2.1rem, smaller than this was before it grew.
+   Passing underneath keeps the size and removes the collision outright. The
+   bottom margin is trimmed to pay most of the height back. */
+.ll-mast { margin-top: 28px; margin-bottom: var(--s2); }
 .ll-mast-name {
   font-family: var(--font-board) !important;
   font-size: 2.4rem !important; font-weight: 700 !important; line-height: 0.92 !important;
@@ -623,6 +642,11 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
   background: var(--amber);
   box-shadow: 0 0 0.3em 0.03em rgba(255,179,0,0.65);
   align-self: center;
+  /* Never shrink. The two words are text nodes and cannot compress below their
+     own glyphs, so this was the only item in the flex row with any give — and
+     when the title ran wide, the browser took every pixel it needed out of the
+     lamp. It did not disappear; it was crushed to a sliver. */
+  flex: 0 0 auto;
 }
 /* ------------------------------------------------- section captions */
 .ll-cap {
