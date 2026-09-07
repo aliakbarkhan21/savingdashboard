@@ -585,14 +585,27 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
   border-color: var(--rule-2) !important;
   color: var(--amber) !important;
 }
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: var(--s3) !important; }
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 10px !important; }
+/* Section captions carry a full 24px above them on the board, where they
+   separate whole regions. In the sidebar they separate two short groups in a
+   panel that has to fit a laptop window, and 24px twice over was most of a row. */
+[data-testid="stSidebar"] .ll-cap { margin-top: var(--s4); }
 [data-testid="stSidebar"] hr { border-color: var(--rule) !important; margin: var(--s3) 0 !important; }
 
 /* ------------------------------------------------------- masthead */
-.ll-mast { margin-bottom: var(--s5); }
+/* The wordmark is the one thing in this panel that should be large; it was set
+   smaller than the board's own service period, which read as timid. It grows
+   downward only — line-height stays below 1 and the container's 10px top
+   padding is untouched, so the gap above it does not move. */
+.ll-mast { margin-bottom: var(--s4); }
 .ll-mast-name {
   font-family: var(--font-board) !important;
-  font-size: 2.05rem !important; font-weight: 700 !important; line-height: 0.95 !important;
+  font-size: 2.4rem !important; font-weight: 700 !important; line-height: 0.92 !important;
+  /* Streamlit pads every <h1> by 20px above and 16px below. On a page that is
+     36px of nothing; in a sidebar that has to fit a laptop window it was the
+     gap above the wordmark and a third of the space the wordmark itself takes.
+     Zeroed, the type gets bigger AND the title sits higher than before. */
+  padding: 0 !important;
   letter-spacing: 0.012em; text-transform: uppercase;
   /* !important because this is a real <h1> — Streamlit applies its own
      heading color from .streamlit/config.toml's static textColor, which
@@ -606,11 +619,6 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
   background: var(--amber); box-shadow: 0 0 10px 1px rgba(255,179,0,0.65);
   align-self: center;
 }
-.ll-mast-sub {
-  font-size: var(--t-micro); letter-spacing: 0.18em; text-transform: uppercase;
-  color: var(--ink-3); margin-top: 7px; font-weight: 600;
-}
-
 /* ------------------------------------------------- section captions */
 .ll-cap {
   font-size: var(--t-micro); font-weight: 700; letter-spacing: 0.17em;
@@ -1831,6 +1839,18 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   box-shadow: var(--lift-2) !important;
 }
 [data-testid="stTooltipContent"] * { color: var(--ink) !important; }
+/* A tooltip should describe what you are pointing at, not what you last
+   pressed. Streamlit shows it on focus as well as hover, and a mouse click
+   leaves the button focused — so every icon button kept its label floating
+   over the board after it had been used, describing an action already taken.
+   
+   The condition is "nothing is being hovered AND nothing has keyboard focus".
+   :focus-visible is the load-bearing half: a mouse click sets :focus but not
+   :focus-visible, while Tab sets both — so this drops the tooltip after a click
+   and keeps it for anyone driving the board from the keyboard, who has no
+   other way to know what an unlabelled icon does. Verified both ways. */
+body:not(:has([data-testid="stTooltipHoverTarget"]:hover)):not(:has(:focus-visible))
+  [data-testid="stTooltipContent"] { display: none !important; }
 
 [data-testid="stFileUploaderDropzone"] button {
   background: var(--panel-3) !important;

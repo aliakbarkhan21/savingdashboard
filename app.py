@@ -568,9 +568,11 @@ def figure_block(label, value, icon_name, tone="", note="", animate=False):
 # ================================================================= sidebar
 
 with st.sidebar:
+    # No subtitle under the wordmark. "Departures board" restated in six-point
+    # caps what the board itself says at full size two hundred pixels to the
+    # right, and it cost a line of a sidebar that had run past the fold.
     html('<div class="ll-mast">',
          '<h1 class="ll-mast-name">LOOT<span class="ll-lamp"></span>LEDGER</h1>',
-         '<div class="ll-mast-sub">Departures board</div>',
          '</div>')
 
     # The theme toggle used to sit here, full width, under the masthead. It is
@@ -724,8 +726,12 @@ with st.sidebar:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    html('<div style="flex:1 1 auto;min-height:16px;"></div>',
-         '<div style="border-top:1px solid var(--rule);padding-top:14px;',
+    # No flex spacer above this. It existed to hold the credit at the foot of
+    # the panel, which on a short window put it below the fold — the sidebar ran
+    # to 689px and anything under about 695px of viewport scrolled. It now
+    # follows the picker directly.
+    html('<div style="margin-top:var(--s3);',
+         'border-top:1px solid var(--rule);padding-top:12px;',
          'font-size:0.6875rem;color:var(--ink-3);letter-spacing:0.06em;',
          'text-align:center;">',
          'Built by <a href="https://www.linkedin.com/in/muhammad-ali-akbar-khan-7b37b8197" ',

@@ -247,6 +247,8 @@ Both are **self-hosted** from `/app/static/fonts` as seven woff2 faces, latin su
 
 The page is a full-width board inside a 1680px container with 24px side padding and 32px below. The sidebar is a fixed enamel column at `{colors.panel}` with a strong hairline on its right edge, holding the masthead, the entry form and the period picker; the board owns the main column.
 
+**The sidebar has to fit a laptop window without scrolling.** It ran to 689px, so anything under about 695px of viewport scrolled — and what it was spending that height on was mostly not content. Streamlit pads every `<h1>` by 20px above and 16px below; in a sidebar that was the gap above the wordmark and a third of the wordmark's own box, so it is zeroed and the type is *larger* than before while sitting *higher*. The "Departures board" subtitle went with it — six-point caps restating what the board says at full size two hundred pixels to the right. The credit no longer rides a flex spacer to the floor, which on a short window put it below the fold. 689px → 596px.
+
 The board declares itself a named inline-size container, and every responsive step is a container query. This is load-bearing: opening the bot panel narrows the board while the window does not change width, so viewport queries would read the wrong number. The flap figures size in `cqi` for the same reason.
 
 Breakpoints are container widths. At 1150px the figure steps down and the cells tighten; at 720px the four figures fold to 2×2; at 520px the figures stack to one column and the two ledger columns become one. The four figures stay on one strip everywhere above 720px. A single viewport media query survives, on the first-run teaching panel, which sits outside the board container.
@@ -339,6 +341,11 @@ Losing the bars costs less than it looks. The run strip at the foot of the board
 The picker holds its own widget state, so anything that moves the board without touching it — the command palette, an off-screen jump button — must write that state back *before* the widget is created on the next run. Streamlit refuses a write to a widget's key once the widget exists, and a picker left holding a stale value drags the board back to it.
 
 **Tabs** are addressed by `[data-testid="stTab"]` and `[aria-selected]`, never by `data-baseweb`. Streamlit moved tabs off BaseWeb onto react-aria and every `[data-baseweb="tab*"]` rule here silently stopped matching — with four tabs on screen those selectors returned zero elements while `[data-testid="stTab"]` returned four. The label sits in a nested markdown container, so type rules go on its `<p>`. This is worth remembering beyond tabs: **dead CSS fails silently**, and the only honest check is to count what a selector matches in a live page.
+
+### Tooltips
+A tooltip describes what you are pointing at, not what you last pressed. Streamlit shows it on focus as well as hover and a mouse click leaves a button focused, so every icon button kept its label floating over the board after being used — describing an action already taken.
+
+Hidden when nothing is hovered *and* nothing holds keyboard focus. `:focus-visible` is the load-bearing half: a mouse click sets `:focus` but not `:focus-visible`, while Tab sets both. So the tooltip drops after a click and survives for anyone driving the board from the keyboard, who has no other way to learn what an unlabelled icon does.
 
 ### Dropdowns
 A dropdown must not behave like a text field. Streamlit renders every `st.selectbox` as a react-aria combobox — a real `<input type="text">` — so clicking one puts a caret in it and typing filters the list; type anything the list does not hold and it says "No results", which reads as broken rather than as a filter that found nothing. Every one of them is therefore `readOnly`, which leaves the dropdown intact (it still focuses, still opens on click, arrow keys and Enter still choose) and removes only the keystrokes.
