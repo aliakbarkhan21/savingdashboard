@@ -615,8 +615,13 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
   color: var(--ink) !important; margin: 0; display: flex; align-items: baseline; gap: 0.42rem;
 }
 .ll-mast-name .ll-lamp {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--amber); box-shadow: 0 0 10px 1px rgba(255,179,0,0.65);
+  /* Sized in em, not pixels. It was a fixed 9px against a 2.05rem wordmark —
+     0.27 of the cap height — and when the wordmark grew the lamp stayed put and
+     quietly shrank against it. Tied to the type, it holds the proportion it was
+     drawn at whatever size the title is set to. The glow scales with it. */
+  width: 0.27em; height: 0.27em; border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 0.3em 0.03em rgba(255,179,0,0.65);
   align-self: center;
 }
 /* ------------------------------------------------- section captions */
