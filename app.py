@@ -667,85 +667,59 @@ with st.sidebar:
                 else:
                     st.warning("Needs a name and an amount above zero.")
 
-    # ---- the month rail: navigation that is already a chart ---------------
+    # ---- the period picker ------------------------------------------------
     html(cap("Service history"))
 
-    rail_keys = sorted(series, reverse=True)[:10]
-    # The active period must always show as selected, even if it has scrolled
-    # out of the 10 most recent months — otherwise the board can be showing
-    # one period while nothing in the sidebar looks selected at all.
-    active_period = st.session_state.period
-    if active_period in series and active_period not in rail_keys:
-        rail_keys = sorted(set(rail_keys) | {active_period}, reverse=True)
-    peak = max((series[k].outflow for k in rail_keys), default=0.0) or 1.0
-    # These must out-rank theme.py's sidebar button skin. That rule is
-    # !important and equally specific, and Streamlit puts the sidebar BEFORE
-    # main in the DOM — so the stylesheet emitted "first" in the script actually
-    # lands later in document order and would win a tie. Adding .stButton takes
-    # the rail to (0,3,1) and settles it outright.
-    SB = '[data-testid="stSidebar"] [class*="st-key-month_"] .stButton button'
-    rail_css = [
-        # A crisp tick at the end of each bar is what makes two near-equal
-        # months readable as near-equal rather than as no encoding at all.
-        SB + "{background:linear-gradient(90deg,"
-        "rgba(var(--ink-rgb),0.20) 0%,"
-        "rgba(var(--ink-rgb),0.20) calc(var(--fill,0%) - 2px),"
-        "rgba(var(--ink-rgb),0.62) calc(var(--fill,0%) - 2px),"
-        "rgba(var(--ink-rgb),0.62) var(--fill,0%),"
-        "rgba(var(--ink-rgb),0.045) var(--fill,0%)) !important;"
-        "border:1px solid transparent !important;"
-        # The rail is a bar chart before it is a button: it takes the small
-        # radius rather than the chrome one, and none of the button skin's
-        # resting shadow, which would read as 10 stacked cards.
-        "border-radius:var(--radius-sm) !important;box-shadow:none !important;"
-        "min-height:32px !important;justify-content:flex-start !important;"
-        "font-family:var(--font-board) !important;letter-spacing:0.07em !important;"
-        "text-transform:uppercase !important;color:var(--ink-2) !important;}",
-        SB + ":hover{border-color:var(--rule-2) !important;color:var(--ink) !important;}",
-        SB + " p{width:100% !important;text-align:left !important;}",
-    ]
+    # A dropdown, not a stack of buttons.
+    #
+    # The stack had to be capped at ten to stop it running down the sidebar, and
+    # that cap was the real cost: on a board with more history than ten months,
+    # the eleventh back had no route from here at all. A dropdown holds every
+    # period and stops growing down the page.
+    #
+    # What the buttons carried that this does not is the bar — each one's
+    # background encoded that month's outflow, so the rail was navigation and a
+    # chart at once. That reading is not lost: the run strip at the foot of the
+    # board draws the same twelve months at a size you can actually compare
+    # them at, and the amount still rides on every option here.
+    period_keys = sorted(series, reverse=True)
+    # The active period must be selectable even when it holds no rows — an empty
+    # current month is not in `series`, and a value outside the options list is
+    # an outright Streamlit error rather than a quiet fallback.
+    if (st.session_state.period not in period_keys
+            and st.session_state.period != finance.ALL_TIME):
+        period_keys = sorted(set(period_keys) | {st.session_state.period},
+                             reverse=True)
+    period_options = period_keys + [finance.ALL_TIME]
 
-    def rail_rule(key, body):
-        safe = key.replace("-", "_")
-        return (f'[data-testid="stSidebar"] .st-key-month_{safe} '
-                f'.stButton button{{{body}}}')
+    def period_label(key: str) -> str:
+        if key == finance.ALL_TIME:
+            return "All Time"
+        row = series.get(key)
+        if row is None:
+            return f"{finance.month_short(key)} {key[2:4]}"
+        # Symbol comes from the active display currency — hardcoding "Rs" here
+        # left the rail reading "RS 189.23" on a board showing dollars.
+        return (f"{finance.month_short(key)} {key[2:4]}"
+                f"   {CURRENCY_SYMBOL} {finance.money_compact(row.outflow)}")
 
-    for key in rail_keys:
-        pct = max(3.0, series[key].outflow / peak * 100.0)
-        rail_css.append(rail_rule(key, f"--fill:{pct:.1f}%;"))
-        if key == st.session_state.period:
-            rail_css.append(rail_rule(key,
-                "background:linear-gradient(90deg,"
-                "rgba(var(--amber-rgb),0.32) 0%,"
-                "rgba(var(--amber-rgb),0.32) calc(var(--fill,0%) - 2px),"
-                "rgba(var(--amber-rgb),0.95) calc(var(--fill,0%) - 2px),"
-                "rgba(var(--amber-rgb),0.95) var(--fill,0%),"
-                "rgba(var(--amber-rgb),0.07) var(--fill,0%)) !important;"
-                "color:var(--amber) !important;"
-                "border-color:rgba(var(--amber-rgb),0.38) !important;"))
-    if st.session_state.period == finance.ALL_TIME:
-        rail_css.append(rail_rule("all",
-            "background:rgba(var(--amber-rgb),0.18) !important;"
-            "color:var(--amber) !important;"
-            "border-color:rgba(var(--amber-rgb),0.38) !important;"))
-    st.markdown(f"<style>{''.join(rail_css)}</style>", unsafe_allow_html=True)
+    # The command palette and its off-screen jump buttons write
+    # st.session_state.period directly, so the picker has to be told when the
+    # board moved without it — otherwise it holds its old value, disagrees with
+    # the board on the next run, and drags the period back.
+    #
+    # This has to happen BEFORE the widget is created: Streamlit refuses a write
+    # to a widget's own key once that widget exists on the current run.
+    if st.session_state.get("period_pick") != st.session_state.period:
+        st.session_state.period_pick = st.session_state.period
 
-    st.markdown('<div class="ll-railwrap">', unsafe_allow_html=True)
-    for key in rail_keys:
-        row = series[key]
-        # The run of spaces that used to separate these collapsed to one in
-        # markdown, so "AUG 26     52,479" rendered as "AUG 26 52,479" and the
-        # year ran straight into the amount. An explicit separator survives.
-        # Symbol comes from the active display currency — hardcoding "Rs"
-        # here left the rail reading "RS 189.23" on a board showing dollars.
-        label = (f"{finance.month_short(key)} {key[2:4]}: "
-                 f"{CURRENCY_SYMBOL} {finance.money_compact(row.outflow)}")
-        if st.button(label, key=f"month_{key.replace('-', '_')}", width="stretch"):
-            st.session_state.period = key
-            st.rerun()
-    if st.button("ALL TIME", key="month_all", width="stretch"):
-        st.session_state.period = finance.ALL_TIME
-        st.rerun()
+    def _pick_period():
+        st.session_state.period = st.session_state.period_pick
+
+    st.selectbox("Period", period_options, format_func=period_label,
+                 key="period_pick", on_change=_pick_period,
+                 label_visibility="collapsed")
+
     st.markdown("</div>", unsafe_allow_html=True)
 
     html('<div style="flex:1 1 auto;min-height:16px;"></div>',

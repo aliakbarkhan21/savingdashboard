@@ -613,27 +613,12 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
 }
 [data-testid="stSidebar"] .ll-cap:first-child { margin-top: 0; }
 
-/* ---------------------------------------------------- the month rail */
-/* Navigation that is already a chart: each month's bar is its outflow. */
-.ll-rail { display: flex; flex-direction: column; gap: 1px; margin-bottom: var(--s2); }
-.ll-rail-row {
-  display: grid; grid-template-columns: 46px 1fr auto; align-items: center;
-  gap: var(--s2); padding: 7px var(--s2); border-radius: var(--radius);
-  border-left: 2px solid transparent; background: transparent;
-}
-.ll-rail-row.is-active { background: var(--amber-12); border-left-color: var(--amber); }
-.ll-rail-mon {
-  font-family: var(--font-board); font-size: var(--t-small); font-weight: 600;
-  letter-spacing: 0.09em; color: var(--ink-2);
-}
-.ll-rail-row.is-active .ll-rail-mon { color: var(--amber); }
-.ll-rail-bar { height: 5px; background: rgba(var(--ink-rgb),0.08); border-radius: 99px; overflow: hidden; }
-.ll-rail-fill { height: 100%; background: var(--ink-3); border-radius: 99px; }
-.ll-rail-row.is-active .ll-rail-fill { background: var(--amber); }
-.ll-rail-amt {
-  font-size: var(--t-micro); color: var(--ink-3); font-weight: 600; min-width: 46px; text-align: right;
-}
-.ll-rail-row.is-active .ll-rail-amt { color: var(--ink-2); }
+/* The month rail is gone: it is a dropdown now, because a stack of buttons had
+   to be capped at ten to fit the sidebar and that cap left older months with no
+   route from here. Its stylesheet went with it — .ll-rail / -row / -mon / -bar /
+   -fill / -amt described markup app.py had already stopped emitting long before
+   that, and had been matching nothing for some time. (.ll-rail-anchor and
+   .ll-rail-in below are unrelated and still live: they belong to the bot rail.) */
 
 /* ============================================================ the board */
 

@@ -100,7 +100,7 @@ available.
 
 **No charting library.** Plotly was listed here but is imported nowhere; every graphic is
 hand-drawn — the category donut is inline SVG generated in `theme.donut_svg`, and the
-month run strip, budget meters and rail bars are CSS. This is deliberate: a chart library
+month run strip and the budget meters are CSS. This is deliberate: a chart library
 brings its own visual defaults, and the point of the board is that nothing on it looks
 like a default.
 
@@ -133,10 +133,16 @@ refactor, not a tidiness exercise. The switch is a pure-CSS checkbox: no rerun.
 shipped and only the bot could see it — the two figures it is made of sat side by side on
 screen and the total was nowhere. It is now the panel's third cell.
 
+**Choosing a period.** The sidebar holds a dropdown of every month plus All Time, each
+labelled with that month's outflow. It replaced a stack of month buttons whose backgrounds
+encoded that outflow as a bar — navigation that was also a chart, which read well but had
+to be capped at ten to fit the sidebar, leaving anything older unreachable from there. The
+bars are not missed: the run strip already draws the same twelve months larger. The
+general rule that came out of it — if a navigation control has to be truncated to fit, it
+is the wrong control.
+
 **Command palette (Ctrl/Cmd+K).** Jump to any month, filter the board by platform, open
-Settings or the bot. This also closes a real hole: the sidebar rail renders only the ten
-most recent months, so on a board with more history than that the older months had no
-route to them at all. Every month gets a palette entry and an off-screen button; the
+Settings or the bot. Every month gets a palette entry and an off-screen button; the
 palette clicks it rather than writing state itself, so a choice is an ordinary widget
 interaction. Filters drive the toolbar's existing search box rather than adding a second
 filter with different rules.

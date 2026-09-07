@@ -185,7 +185,7 @@ Motion is one authored moment and it is earned: the flap settle plays only when 
 A monochrome enamel field lit by one amber lamp, with a transit-line palette held in reserve for category identity alone.
 
 ### Primary
-- **Signal Amber** (`{colors.amber}`): the board's light. The four flap figures, the active month on the rail, the selected tab, focus rings, the primary button fill, the caret, links, and the current month's run-strip bar. Nothing decorative is amber.
+- **Signal Amber** (`{colors.amber}`): the board's light. The four flap figures, the selected tab, focus rings, the primary button fill, the caret, links, and the current month's run-strip bar. Nothing decorative is amber.
 
 ### Secondary
 - **Arrival Green** (`{colors.arrival}`) and **Departure Coral** (`{colors.departure}`): status only. They report the on-time / cancelled lamp, the capacity-meter fill at its thresholds, a negative on-hand figure, and the direction of a period-over-period delta. They never tint the arrivals and departures columns themselves.
@@ -245,7 +245,7 @@ Both are **self-hosted** from `/app/static/fonts` as seven woff2 faces, latin su
 
 ## Layout
 
-The page is a full-width board inside a 1680px container with 24px side padding and 32px below. The sidebar is a fixed enamel column at `{colors.panel}` with a strong hairline on its right edge, holding the masthead, the month rail and the entry forms; the board owns the main column.
+The page is a full-width board inside a 1680px container with 24px side padding and 32px below. The sidebar is a fixed enamel column at `{colors.panel}` with a strong hairline on its right edge, holding the masthead, the entry form and the period picker; the board owns the main column.
 
 The board declares itself a named inline-size container, and every responsive step is a container query. This is load-bearing: opening the bot panel narrows the board while the window does not change width, so viewport queries would read the wrong number. The flap figures size in `cqi` for the same reason.
 
@@ -328,9 +328,13 @@ The flap's own material stays literal on purpose, and it is material rather than
 - **Focus:** border goes amber, plus the global amber focus ring. Every interactive surface keeps that ring.
 
 ### Navigation
-The month rail is navigation that is already a chart: each month is a button whose background gradient encodes that month's outflow against the period peak, with a crisp tick at the bar's end so two near-equal months read as near-equal. It keeps condensed caps (the month name is board language) and takes the 6px radius with no resting shadow — it is a bar chart before it is a button. The active month reads in amber.
+Periods are chosen from a **dropdown** in the sidebar, one option per month plus All Time, each carrying that month's outflow in the display currency. Streamlit's selectbox is type-to-filter, so reaching a month two years back is three keystrokes.
 
-The rail draws only the **ten most recent** months. Everything older is reached through the command palette, which is the only route to it.
+This replaced a month rail that was *navigation and a chart at once*: a stack of buttons whose background gradients encoded each month's outflow against the period peak. It read well and it did not scale — a stack that tall had to be capped at ten, and that cap was the real cost, because the eleventh month back then had no route from the sidebar at all.
+
+Losing the bars costs less than it looks. The run strip at the foot of the board already draws the same twelve months at a size you can actually compare them at, so the rail was a second, smaller copy of a chart that was already on screen; the amount survives on every option. The rule this leaves behind: **when a navigation control has to be truncated to fit, it is the wrong control** — reach beats encoding, and the encoding usually already lives somewhere with room for it.
+
+The picker holds its own widget state, so anything that moves the board without touching it — the command palette, an off-screen jump button — must write that state back *before* the widget is created on the next run. Streamlit refuses a write to a widget's key once the widget exists, and a picker left holding a stale value drags the board back to it.
 
 **Tabs** are addressed by `[data-testid="stTab"]` and `[aria-selected]`, never by `data-baseweb`. Streamlit moved tabs off BaseWeb onto react-aria and every `[data-baseweb="tab*"]` rule here silently stopped matching — with four tabs on screen those selectors returned zero elements while `[data-testid="stTab"]` returned four. The label sits in a nested markdown container, so type rules go on its `<p>`. This is worth remembering beyond tabs: **dead CSS fails silently**, and the only honest check is to count what a selector matches in a live page.
 

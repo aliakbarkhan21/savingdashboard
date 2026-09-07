@@ -59,8 +59,8 @@ so it costs no reload.
 the two figures it is made of.
 
 **Command palette.** Ctrl/Cmd+K to jump to any month, filter the board by
-platform, or open Settings and the bot. The sidebar rail only lists the ten most
-recent months; the palette is how you reach anything older.
+platform, or open Settings and the bot. The sidebar picker covers every month
+too; the palette is the keyboard route to the same places.
 
 **Recurring entries and debt ageing.** Rent, subscriptions and salary are logged
 from a template once their day arrives. Unsettled debts past 30 days are called
