@@ -170,12 +170,19 @@ sources are not a taxonomy, and a third job for colour is a bug. It takes half t
 not the full width it started at: most people's income is one or two sources, so as a
 full-width panel it was reliably the emptiest thing on the board.
 
+Each source also carries its own line and its own change. The ring says what the mix is
+and nothing about whether it holds — two slices at 71/29 look identical whether that is a
+salary and a regular top-up or a salary and a one-off, which is the more useful thing to
+know. Those lines step by month rather than by day: income lands on one or two dates, so
+a day-by-day line for it would draw the pay date rather than the pay.
+
 **When the money went.** The other half of that row is a calendar of the month, each day
 tinted by what left it. The board could say how much a month spent and which categories
 took it and nothing at all about *when* — yet a payday spike, three quiet weeks and a
 weekend that got away all add up to the same donut. It reports the quiet days and the
 heaviest one, counts only days that have actually happened, and does not appear on All
-Time, where a month has no rhythm to have.
+Time, where a month has no rhythm to have. Every row of the grid is a week, so each takes
+its week's total in the margin beside it — which is the reading the squares only imply.
 
 **A baseline for the burn rate.** The Capacity projection reported a daily pace with
 nothing to compare it against, which only someone who already knew their habits could

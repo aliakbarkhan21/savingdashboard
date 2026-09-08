@@ -663,6 +663,25 @@ def income_by_source(frames: Frames, key: str) -> pd.DataFrame:
                .reset_index(drop=True))
 
 
+def source_series(frames: Frames, keys: list[str]) -> dict[str, list[float]]:
+    """Income per source across `keys`, in the order given. Zero-filled.
+
+    The mirror of `category_series`, and deliberately month-stepped even
+    though the category trend beside it steps by day within a month. Spending
+    happens most days, so a month of days has a shape worth drawing; income
+    lands on one or two dates and a cumulative day line for it would be a
+    single step and a flat run — a picture of the pay date, not of the pay.
+    Whether an income is steady or lumpy is a question about months, so months
+    are what this returns.
+    """
+    per_month = [{str(r["source"]): float(r["amount"])
+                  for r in income_by_source(frames, k).to_dict("records")}
+                 for k in keys]
+    names = sorted({s for month in per_month for s in month})
+    return {name: [month.get(name, 0.0) for month in per_month]
+            for name in names}
+
+
 def _days_outstanding(value) -> int:
     try:
         started = datetime.strptime(str(value)[:10], "%Y-%m-%d").date()

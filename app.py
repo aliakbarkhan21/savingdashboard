@@ -537,8 +537,28 @@ def spending_calendar(frames, snap) -> str:
     today = date.today().day if snap.key == CURRENT_PERIOD else days
     elapsed = min(today, days)
 
+    # Every row of the grid is already a week, so each one takes its own total
+    # in the margin — the way a spreadsheet totals a row. It costs no new
+    # concept, it fills the column the grid was leaving empty beside it, and it
+    # answers the thing the squares only imply: which week actually cost you.
+    # The cells are emitted week by week rather than day by day so the total
+    # can be closed off at the right point, including the short first week.
     cells = [f'<div class="ll-cal-dow">{d}</div>' for d in _DOW]
-    cells += ['<div class="ll-cal-pad"></div>'] * lead
+    cells.append('<div class="ll-cal-dow is-sum">wk</div>')
+    week_spend = 0.0
+    week_seen = False
+    slot = 0                      # position in the current week, 0-6
+    for _ in range(lead):
+        cells.append('<div class="ll-cal-pad"></div>')
+        slot += 1
+
+    def close_week():
+        """The row total, or a dash for a week with nothing in it yet."""
+        if week_seen and week_spend > 0:
+            return ('<div class="ll-cal-sum">'
+                    f'{finance.money_compact(week_spend)}</div>')
+        return '<div class="ll-cal-sum is-none">&mdash;</div>'
+
     for index, amount in enumerate(daily):
         day = index + 1
         weekday = _DOW_FULL[(lead + index) % 7]
@@ -550,14 +570,26 @@ def spending_calendar(frames, snap) -> str:
         elif amount <= 0:
             classes.append("is-quiet")
             title = f"{weekday} {day:02d} — nothing spent"
+            week_seen = True
         else:
             alpha = 0.12 + 0.33 * (amount / peak) ** 0.5
             style = f' style="background:rgba(var(--amber-rgb),{alpha:.3f})"'
             title = f"{weekday} {day:02d} — {finance.money(amount, 0)}"
+            week_spend += amount
+            week_seen = True
         if day == today and snap.key == CURRENT_PERIOD:
             classes.append("is-today")
         cells.append(f'<div class="{" ".join(classes)}"{style} title="{esc(title)}">'
                      f'{day}</div>')
+        slot += 1
+        if slot == 7:
+            cells.append(close_week())
+            slot, week_spend, week_seen = 0, 0.0, False
+    if slot:
+        # A month that does not end on a Sunday leaves a short last week: pad
+        # it out so the total still lands in the margin column.
+        cells += ['<div class="ll-cal-pad"></div>'] * (7 - slot)
+        cells.append(close_week())
 
     quiet = sum(1 for i, v in enumerate(daily) if v <= 0 and i < elapsed)
     heaviest = max(range(days), key=lambda i: daily[i])
@@ -1723,24 +1755,94 @@ with stage:
     def source_panel(sources) -> list:
         src_total = float(sources["amount"].sum()) or 1.0
         recs = sources.to_dict("records")
+        # 152, not the 184 the Platform load ring takes. That panel is the
+        # wider of the two; sizing both rings identically made this one look
+        # like it had been dropped in from a larger layout, and the 32px it
+        # gives back is what lets each row carry a sparkline without the
+        # source names truncating.
         ring = theme.donut_svg(
-            recs, src_total,
+            recs, src_total, size=152, thickness=20,
             center_label=finance.money_compact(src_total),
             amount_fmt=lambda v: finance.money(v, 0),
             color_for=theme.amber_tints, key="source",
             label="Arrivals by source", center_sub="arrived")
+
+        # The ring says what the mix is and can say nothing about whether it
+        # holds. Two slices at 71/29 look identical whether that is a salary
+        # and a regular top-up or a salary and a one-off — which is the more
+        # useful thing to know, and the panel had the data for it all along.
+        src_months = sorted(series)[-12:] if is_all_time else             [k for k in sorted(series) if k <= snap.key][-12:]
+        src_lines = (finance.source_series(frames, src_months)
+                     if len(src_months) > 1 else {})
+        src_window = ""
+        if src_lines:
+            src_window = (f'{finance.month_short(src_months[0])} '
+                          f'{src_months[0][2:4]} – '
+                          f'{finance.month_short(src_months[-1])} '
+                          f'{src_months[-1][2:4]}')
+
         rows = []
         for i, r in enumerate(recs):
             name = str(r["source"])
             got = float(r["amount"])
+            vals = src_lines.get(name) or []
+            # The empty string is not an option for either of these two: the
+            # row is a five-column grid, and a missing cell does not leave a
+            # hole where it should be — it pulls every cell after it one
+            # column to the left, which put the amount under the sparklines on
+            # a one-month ledger. They are always emitted, empty when there is
+            # nothing to say.
+            spark = (theme.trend_svg(vals, theme.amber_tints(name, i, len(recs)),
+                                     width=64, height=20,
+                                     label=f"{name}: {src_window}, "
+                                           f"peak {finance.money(max(vals), 0)}")
+                     if vals else "")
+            spark = spark or '<span class="ll-spark-none"></span>' 
+            # No change figure on All Time: the amount beside it is an
+            # all-time total, and a total has nothing month-shaped to be
+            # compared against. The line still draws, because the shape of a
+            # source over the years is a fair thing to show.
+            delta_html = '<span class="ll-spark-none"></span>'
+            if vals and not is_all_time:
+                prior = vals[:-1]
+                base = sum(prior) / len(prior) if prior else 0.0
+                if base <= 0:
+                    tone, delta = ("new", "new") if got > 0 else ("flat", "&mdash;")
+                else:
+                    pct = (got - base) / base * 100.0
+                    if abs(pct) < 1:
+                        tone, delta = "flat", "0%"
+                    elif pct > 0:
+                        tone, delta = "up", f"+{pct:.0f}%"
+                    else:
+                        tone, delta = "down", f"{pct:.0f}%"
+                # Rising income is good news, so the tones are the other way
+                # round from spending: an arrival going up reads in the
+                # arrival colour, not the departure one.
+                delta_html = (f'<div class="ll-trend-delta is-in {tone}">'
+                              f'{delta}</div>')
             rows.append(
                 '<div class="ll-src-item">'
                 f'<span class="ll-src-dot" style="background:'
                 f'{theme.amber_tints(name, i, len(recs))}"></span>'
-                f'<div class="ll-load-name">{esc(name)}</div>'
-                f'<div class="ll-load-pct">{got / src_total * 100:.0f}%</div>'
+                f'<div class="ll-load-name" title="{esc(name)} — '
+                f'{got / src_total * 100:.0f}% of arrivals">{esc(name)}</div>'
+                f'{spark}'
                 f'<div class="ll-load-amt">{finance.money(got, 0)}</div>'
+                f'{delta_html}'
                 '</div>')
+
+        foot = ""
+        if src_lines:
+            if is_all_time:
+                foot = (f'{esc(src_window)} &middot; each line is that source month '
+                        'by month, scaled to its own peak.')
+            else:
+                before = len(src_months) - 1
+                foot = (f'{esc(src_window)} &middot; each line is that source month '
+                        'by month, scaled to its own peak. The change is this '
+                        f'month against its average over the {before} month'
+                        f'{"s" if before != 1 else ""} before it.')
         return ['<div class="ll-panel ll-panel-fill">',
                 '<div class="ll-panel-head">',
                 f'<div class="ll-panel-title">{icons.icon("arrival", 15)}'
@@ -1748,7 +1850,9 @@ with stage:
                 f'<div class="ll-col-sum">{finance.money(src_total, 0)}</div>',
                 '</div><div class="ll-panel-body"><div class="ll-load">',
                 f'<div class="ll-donut-wrap">{ring}</div>',
-                '<div class="ll-load-list">', *rows, '</div></div></div></div>']
+                '<div class="ll-load-list">', *rows, '</div></div>',
+                f'<div class="ll-trend-foot">{foot}</div>' if foot else "",
+                '</div></div>']
 
     sources = finance.income_by_source(frames, snap.key)
     calendar_html = spending_calendar(frames, snap)

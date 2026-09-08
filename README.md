@@ -62,11 +62,14 @@ the two figures it is made of.
 
 **Where it came from.** The mirror of Platform load: a ring of the month's
 income by source, drawn in amber rather than category colours because a
-source is whoever paid you, not a category.
+source is whoever paid you, not a category. Each source carries its own line
+across the months and its change against its own average, so a steady salary
+and a one-off windfall do not read the same.
 
 **When it went.** Beside it, the month as a grid of days, each tinted by what
-left that day — the shape of a month, which the donut cannot show. Names the
-quiet days and the heaviest one, and counts only the days that have happened.
+left that day — the shape of a month, which the donut cannot show. Every row of
+the grid is a week and takes its own total in the margin. Names the quiet days
+and the heaviest one, and counts only the days that have happened.
 
 **Debts by person.** One card per person with both directions netted, so
 someone you have both lent to and borrowed from shows as a single number.

@@ -202,12 +202,25 @@ def trend_svg(values, colour, width=104, height=26, label=""):
     span_y = height - inset * 2
 
     if top <= 0:
-        # A months-long flat zero is a real answer. Drawing nothing would look
-        # like missing data, which is a different and wrong statement.
+        # A run of flat zero is a real answer. Drawing nothing would look like
+        # missing data, which is a different and wrong statement.
         line = (f'<line x1="{inset}" y1="{floor_y:.2f}" x2="{width - inset}" '
                 f'y2="{floor_y:.2f}" stroke="{colour}" stroke-width="1.6" '
                 f'stroke-linecap="round" opacity="0.35"/>')
         pts_last = None
+        body = line
+    elif min(values) == top:
+        # Every reading identical — a salary that is the same number every
+        # month. On an axis scaled to its own peak that puts every point at
+        # the ceiling, and with the area fill under it the row came out as a
+        # solid block: it read as "enormous" when it means "unvarying". Drawn
+        # flat through the middle instead, with no fill, which is the same
+        # thing the zero case says one floor down.
+        mid = height / 2
+        line = (f'<line x1="{inset}" y1="{mid:.2f}" x2="{width - inset}" '
+                f'y2="{mid:.2f}" stroke="{colour}" stroke-width="1.6" '
+                f'stroke-linecap="round"/>')
+        pts_last = (width - inset, mid)
         body = line
     else:
         step = span_x / (len(values) - 1)
@@ -1045,21 +1058,39 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 .ll-load-list { flex: 0 1 auto; min-width: 0; max-width: 380px; width: 100%;
                 display: flex; flex-direction: column; gap: 0; }
 /* Arrivals rows carry a swatch, not a two-letter chip: a source is whoever
-   paid you, not a platform with a fixed code in the map. Same grid otherwise. */
+   paid you, not a platform with a fixed code in the map. Otherwise this is the
+   trend row's grid: swatch, name, line, amount, change. The share each source
+   holds moved off the row and onto its hover and its arc — the ring is already
+   drawing it, and five columns in ~330px is all the row will take. */
 .ll-src-item {
-  display: grid; grid-template-columns: 30px minmax(0,1fr) auto auto;
-  align-items: center; gap: var(--s3);
+  display: grid;
+  grid-template-columns: 22px minmax(0,1fr) auto auto auto;
+  align-items: center; gap: var(--s2);
   padding: 7px 0; border-bottom: 1px solid var(--rule);
 }
+.ll-src-item .ll-load-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ll-src-item .ll-load-amt { min-width: 0; }
+/* Rising income is good news, so an arrival's change reads in the opposite
+   tones to a departure's: up is the arrival colour, down is the departure
+   one. Same figures, same class, inverted meaning — which is exactly what a
+   modifier is for. */
+.ll-trend-delta.is-in.up { color: var(--arrival); }
+.ll-trend-delta.is-in.down { color: var(--departure); }
 .ll-src-item:last-child { border-bottom: none; }
 .ll-src-dot {
   width: 12px; height: 12px; border-radius: var(--radius-tile);
   display: inline-block; justify-self: center;
 }
-/* Half-width now, and a ring plus a list of two does not always fit side by
-   side once the board is narrow. Wrapping puts the list under the ring rather
-   than crushing either — and only when it has to. */
-.ll-load { flex-wrap: wrap; }
+/* Do NOT add flex-wrap here. It was added when this panel went half-width, on
+   the theory that a ring plus a list would not fit side by side — and it is
+   the wrong tool, because the list can already shrink: `flex: 0 1 auto`
+   against a 380px max-width. With wrapping on, the browser breaks the line at
+   the basis rather than shrinking to fit, so at 496px of room the list
+   dropped underneath a 184px ring and left the whole right half of the panel
+   empty. Without it the list narrows to ~288px, sits beside the ring, and the
+   row is full. */
 
 /* ---- the spending calendar --------------------------------------------
    Days are mechanism, so they take --radius-tile like every other cell on
@@ -1068,10 +1099,24 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
    
    aspect-ratio rather than a height, so the grid keeps its shape at any panel
    width without a media query per breakpoint. */
+/* Seven day columns and a margin for the week's own total. The day columns
+   share the room equally and the margin takes only what its figures need, so
+   a wider panel grows the squares rather than the numbers. */
 .ll-cal {
-  display: grid; grid-template-columns: repeat(7, 1fr);
-  gap: 4px; max-width: 380px;
+  display: grid; grid-template-columns: repeat(7, 1fr) auto;
+  gap: 4px; max-width: 460px;
 }
+.ll-cal-dow.is-sum { padding-left: 6px; }
+/* The row total sits in the margin, not in the grid: no fill, no border, and
+   the board's tabular figure face, so it reads as an annotation of the week
+   rather than as an eighth day. */
+.ll-cal-sum {
+  display: flex; align-items: center; justify-content: flex-end;
+  padding-left: 6px;
+  font-family: var(--font-board); font-size: var(--t-micro);
+  font-weight: 600; color: var(--ink-2); white-space: nowrap;
+}
+.ll-cal-sum.is-none { color: var(--ink-3); opacity: 0.5; }
 .ll-cal-dow {
   font-family: var(--font-board); font-size: var(--t-micro);
   letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3);
