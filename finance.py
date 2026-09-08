@@ -561,6 +561,92 @@ def category_series(frames: Frames, keys: list[str]) -> dict[str, list[float]]:
     return {name: [month.get(name, 0.0) for month in per_month] for name in names}
 
 
+def days_in_period(key: str) -> int:
+    """How many days the month `key` holds. 0 for All Time, which has no shape."""
+    if key == ALL_TIME:
+        return 0
+    year, month = int(key[:4]), int(key[5:7])
+    return calendar.monthrange(year, month)[1]
+
+
+def _daily_rows(frames: Frames, key: str):
+    """Every spending row inside one month, paired with its day of the month.
+
+    Transport is folded into Transportation here for the same reason
+    `_category_totals` does it: two ledgers, one category, and a single place
+    that decides how they add up.
+    """
+    days = days_in_period(key)
+    if not days:
+        return []
+    out = []
+    exp = _in_period(frames.expenses, key)
+    if not exp.empty:
+        for row in exp.to_dict("records"):
+            out.append((str(row["date"])[8:10], str(row["category"]),
+                        float(row["amount"])))
+    trans = _in_period(frames.transport, key)
+    if not trans.empty:
+        for row in trans.to_dict("records"):
+            out.append((str(row["date"])[8:10], "Transportation",
+                        float(row["amount"])))
+    return [(int(d), c, a) for d, c, a in out if d.isdigit() and 1 <= int(d) <= days]
+
+
+def category_daily(frames: Frames, key: str) -> dict[str, list[float]]:
+    """Cumulative spend per category through one month, day by day.
+
+    Cumulative rather than per-day, and the choice is about what a 104x26px
+    line can actually say. Per-day, a category with four purchases in it is
+    four spikes on an empty floor — noise at that size, and indistinguishable
+    from a different category with four purchases somewhere else. Cumulative,
+    the same row reads as a shape: a step early and then flat is one big buy at
+    the start of the month, a steady climb is a habit, a late kick is a month
+    that got away at the end.
+
+    A category with nothing in this month gets a list of zeros, which draws as
+    the flat line that says exactly that. Every category is given a full-length
+    list so the rows share an axis.
+
+    Days beyond today in the month in progress are still included: the line
+    running flat to the right edge IS the month having not happened yet, and
+    truncating it would make a half-finished month look like a completed one.
+    """
+    days = days_in_period(key)
+    if not days:
+        return {}
+    rows = _daily_rows(frames, key)
+    names = sorted({c for _, c, _ in rows})
+    per_day = {name: [0.0] * days for name in names}
+    for day, category, amount in rows:
+        per_day[category][day - 1] += amount
+    out = {}
+    for name, values in per_day.items():
+        running = 0.0
+        cumulative = []
+        for value in values:
+            running += value
+            cumulative.append(running)
+        out[name] = cumulative
+    return out
+
+
+def daily_outflow(frames: Frames, key: str) -> list[float]:
+    """What left on each day of one month, in day order. [] for All Time.
+
+    The whole month across every category, which is the other half of the
+    question `category_daily` answers per row: not "how did this category
+    accumulate" but "which days were expensive".
+    """
+    days = days_in_period(key)
+    if not days:
+        return []
+    totals = [0.0] * days
+    for day, _, amount in _daily_rows(frames, key):
+        totals[day - 1] += amount
+    return totals
+
+
 def income_by_source(frames: Frames, key: str) -> pd.DataFrame:
     """Arrivals grouped by the source they were logged under.
 

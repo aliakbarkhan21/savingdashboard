@@ -485,6 +485,100 @@ def spacer(px: int) -> None:
     st.markdown(f'<div style="height:{px}px"></div>', unsafe_allow_html=True)
 
 
+# Weekday headers, Monday first — which is what calendar.monthrange returns as
+# day 0 and what a month here is read as. Doubled letters would be ambiguous
+# (T/T, S/S); the grid position disambiguates them, and the full name is on
+# every cell's hover.
+_DOW = ("M", "T", "W", "T", "F", "S", "S")
+_DOW_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+             "Saturday", "Sunday")
+
+
+def spending_calendar(frames, snap) -> str:
+    """The month as a grid of days, each tinted by what left that day.
+
+    The board could say how much a month spent and which categories it went
+    to, and nothing at all about WHEN — yet the shape of a month is most of
+    how it feels to live in. A payday spike, three quiet weeks and a weekend
+    that got away all add up to the same donut.
+
+    Returns "" where the question has no answer: All Time has no days to lay
+    out, and a month with nothing spent in it would be an empty grid saying
+    what the Platform load panel already says better.
+
+    The heat is amber, the same hue the run strip gives the month in progress,
+    and it is scaled to the month's own heaviest day — an absolute scale would
+    make a quiet month look like an empty one. sqrt, not linear: with one big
+    day and twenty small ones a linear ramp puts the twenty at alphas nobody
+    can tell apart, which is the failure mode of every heatmap that scales the
+    way the numbers do rather than the way the eye does.
+
+    The ramp stops at 0.45, and the ceiling is a legibility constraint, not a
+    taste one. Each cell carries its date, and a tint is the panel colour and
+    the amber mixed — so in dark mode the fill climbs TOWARDS the ink as it
+    heats, and in light mode it falls towards it. Measured both ways, 0.45 is
+    where the date still clears 4.5:1 in the worse of the two (5.3:1 dark,
+    8.3:1 light); the first draft ran to 0.90 and the heaviest days had dates
+    on them nobody could read. What that ceiling costs is a little range at the
+    top, and the range was never the point — the hover carries the figure, the
+    grid only has to show the shape.
+    """
+    daily = finance.daily_outflow(frames, snap.key)
+    if not daily or sum(daily) <= 0:
+        return ""
+
+    days = len(daily)
+    year, month = int(snap.key[:4]), int(snap.key[5:7])
+    lead = calendar.monthrange(year, month)[0]
+    peak = max(daily) or 1.0
+    # Days that have not happened yet are not quiet days, they are unwritten
+    # ones — counting them as zero would tell someone on the 3rd that they had
+    # had a wonderfully frugal month.
+    today = date.today().day if snap.key == CURRENT_PERIOD else days
+    elapsed = min(today, days)
+
+    cells = [f'<div class="ll-cal-dow">{d}</div>' for d in _DOW]
+    cells += ['<div class="ll-cal-pad"></div>'] * lead
+    for index, amount in enumerate(daily):
+        day = index + 1
+        weekday = _DOW_FULL[(lead + index) % 7]
+        classes = ["ll-cal-day"]
+        style = ""
+        if day > elapsed:
+            classes.append("is-future")
+            title = f"{weekday} {day:02d} — not yet"
+        elif amount <= 0:
+            classes.append("is-quiet")
+            title = f"{weekday} {day:02d} — nothing spent"
+        else:
+            alpha = 0.12 + 0.33 * (amount / peak) ** 0.5
+            style = f' style="background:rgba(var(--amber-rgb),{alpha:.3f})"'
+            title = f"{weekday} {day:02d} — {finance.money(amount, 0)}"
+        if day == today and snap.key == CURRENT_PERIOD:
+            classes.append("is-today")
+        cells.append(f'<div class="{" ".join(classes)}"{style} title="{esc(title)}">'
+                     f'{day}</div>')
+
+    quiet = sum(1 for i, v in enumerate(daily) if v <= 0 and i < elapsed)
+    heaviest = max(range(days), key=lambda i: daily[i])
+    heavy_dow = _DOW_FULL[(lead + heaviest) % 7][:3]
+    note = (f'{quiet} quiet day{"s" if quiet != 1 else ""} so far'
+            if snap.key == CURRENT_PERIOD
+            else f'{quiet} quiet day{"s" if quiet != 1 else ""}')
+    return ''.join([
+        '<div class="ll-panel ll-panel-fill"><div class="ll-panel-head">',
+        f'<div class="ll-panel-title">{icons.icon("calendar", 15)}'
+        'Spending rhythm</div>',
+        f'<div class="ll-col-sum">{finance.money(sum(daily), 0)}</div>',
+        '</div><div class="ll-panel-body">',
+        '<div class="ll-cal">', *cells, '</div>',
+        f'<div class="ll-cal-foot">{note} &middot; heaviest was '
+        f'<b>{heavy_dow} {heaviest + 1:02d}</b> at '
+        f'<b>{finance.money(daily[heaviest], 0)}</b></div>',
+        '</div></div>',
+    ])
+
+
 # What the board's four headline figures mean. This used to be a full-width
 # panel above the board on first run; it lives in the bot rail now, shown while
 # the chat is still empty, which is exactly when someone needs it and is the
@@ -707,6 +801,30 @@ with st.sidebar:
         return (f"{finance.month_short(key)} {key[2:4]}"
                 f"   {CURRENCY_SYMBOL} {finance.money_compact(row.outflow)}")
 
+    # ---- why the key is a hash of the labels -----------------------------
+    # Because a selectbox does not redraw its own closed text when only the
+    # label of the selected option changes.
+    #
+    # Switching the board to dollars reran everything and repainted every
+    # figure on it — and this control went on reading "SEP 26  Rs. 34,080"
+    # until something else made it remount. Opening the dropdown proved where
+    # the fault was: the options inside it were already in dollars while the
+    # collapsed field above them was not. Streamlit sends the new option
+    # strings; the react-aria combobox seeds its input text from the selected
+    # option and only reseeds when the selected INDEX moves, and the index had
+    # not moved. Nothing on the Python side can reach that text.
+    #
+    # Changing the key changes the widget's identity, which remounts it, which
+    # reseeds the text. Hashing the rendered labels rather than the currency
+    # scopes that to exactly the case it is for: any run whose labels read the
+    # same reuses the same widget and keeps its focus and scroll position, and
+    # any run whose labels changed — a currency switch, a rate refresh, an
+    # expense added to a month listed here — gets a fresh one. Streamlit
+    # discards the widget state left behind by the old key on its own.
+    labels = [period_label(k) for k in period_options]
+    pick_key = "period_pick_" + hashlib.md5(
+        "␟".join(labels).encode("utf-8")).hexdigest()[:10]
+
     # The command palette and its off-screen jump buttons write
     # st.session_state.period directly, so the picker has to be told when the
     # board moved without it — otherwise it holds its old value, disagrees with
@@ -714,14 +832,14 @@ with st.sidebar:
     #
     # This has to happen BEFORE the widget is created: Streamlit refuses a write
     # to a widget's own key once that widget exists on the current run.
-    if st.session_state.get("period_pick") != st.session_state.period:
-        st.session_state.period_pick = st.session_state.period
+    if st.session_state.get(pick_key) != st.session_state.period:
+        st.session_state[pick_key] = st.session_state.period
 
     def _pick_period():
-        st.session_state.period = st.session_state.period_pick
+        st.session_state.period = st.session_state[pick_key]
 
     st.selectbox("Period", period_options, format_func=period_label,
-                 key="period_pick", on_change=_pick_period,
+                 key=pick_key, on_change=_pick_period,
                  label_visibility="collapsed")
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1323,11 +1441,75 @@ with stage:
     with p1:
         # The board could say where this month's money went and never whether
         # that was more or less than usual — every view is scoped to one period.
-        # The trend view answers "is this category rising", against the same
-        # twelve months the run strip below is already showing.
-        trend_keys = sorted(series)[-12:]
-        show_trend = len(trend_keys) > 1 and not snap.by_category.empty
-        trend_cats = finance.category_series(frames, trend_keys) if show_trend else {}
+        # The trend view answers that, and it answers it FOR THE PERIOD ON
+        # SCREEN.
+        #
+        # It used to draw a fixed window of the last twelve months on record,
+        # whatever period you were reading — so the panel under "August 2026"
+        # was a September graph, and every row's figure was September's figure.
+        # On a three-month ledger that produced the tell: four categories
+        # reading "Rs. 0 · −100%" beneath a mountain, because the mountain was
+        # months the board was not showing.
+        #
+        # A single month has no month-to-month shape, so on a month the line is
+        # drawn across that month's DAYS instead — cumulative, see
+        # finance.category_daily for why cumulative and not per-day. A category
+        # that spent nothing lands as a flat line on the floor, which is the
+        # honest picture of nothing and the one thing the old graph could never
+        # draw. All Time is the one period where months ARE the axis, so it
+        # keeps the month-by-month line.
+        month_keys = sorted(series)
+        is_all_time = snap.key == finance.ALL_TIME
+        # Every month before the one on screen, which is what "usual" is
+        # measured against. Capped at twelve so a long ledger compares this
+        # month with a recent normal rather than with its own ancient history.
+        prior_keys = [k for k in month_keys if k < snap.key][-12:]
+
+        if is_all_time:
+            window_keys = month_keys[-12:]
+            trend_lines = finance.category_series(frames, window_keys)
+            # On All Time the newest month is the subject and the ones before
+            # it are the baseline — the same reading as a month view, with the
+            # month chosen for you.
+            trend_now = {c: v[-1] for c, v in trend_lines.items()}
+            trend_base = {c: (sum(v[:-1]) / (len(v) - 1) if len(v) > 1 else 0.0)
+                          for c, v in trend_lines.items()}
+            trend_axis = (f'{finance.month_short(window_keys[0])} '
+                          f'{window_keys[0][2:4]} – '
+                          f'{finance.month_short(window_keys[-1])} '
+                          f'{window_keys[-1][2:4]}')
+            trend_foot = (f'{trend_axis} &middot; each line is one month per step, '
+                          'scaled to its own peak, so a category is compared '
+                          'with its own past rather than with the others. The '
+                          'change is the newest month against that category&rsquo;s '
+                          'average over the rest of the window.')
+            show_trend = len(window_keys) > 1 and not snap.by_category.empty
+        else:
+            days = finance.days_in_period(snap.key)
+            trend_lines = finance.category_daily(frames, snap.key)
+            history = finance.category_series(frames, prior_keys) if prior_keys else {}
+            # A category with history but nothing this month still gets a row.
+            # It is a real answer — "you have stopped spending on this" — and
+            # dropping it would quietly hide the very change worth seeing.
+            for name in history:
+                trend_lines.setdefault(name, [0.0] * days)
+            trend_now = {c: (v[-1] if v else 0.0) for c, v in trend_lines.items()}
+            trend_base = {c: (sum(history[c]) / len(history[c])
+                              if history.get(c) else 0.0)
+                          for c in trend_lines}
+            trend_axis = f'{finance.month_label(snap.key)} day by day'
+            trend_foot = (
+                f'{esc(finance.month_label(snap.key))}, day 1 to {days} &middot; each '
+                'line is that category adding up as the month goes, scaled to '
+                'its own total &mdash; so a step then flat is one big purchase, '
+                'a steady climb is a habit, and a flat line is a category you '
+                'did not touch. The change is this month against '
+                + (f'its average over the {len(prior_keys)} month'
+                   f'{"s" if len(prior_keys) != 1 else ""} before it.'
+                   if prior_keys else 'nothing, since this is the first month '
+                   'on record.'))
+            show_trend = (bool(trend_lines) and days > 1
+                          and not snap.by_category.empty)
 
         # ll-panel-fill: this panel shares a row with a taller column, and a
         # short month (two categories, say) left a dead band under it. The
@@ -1400,29 +1582,26 @@ with stage:
             if show_trend:
                 # Ordered by what the month actually spent, so the two views
                 # list the same categories in the same order and switching
-                # between them does not reshuffle the page.
+                # between them does not reshuffle the page. Categories with
+                # nothing this month fall in after, alphabetically.
                 order = [str(r["category"]) for r in snap.by_category.to_dict("records")]
-                order += [c for c in sorted(trend_cats) if c not in order]
-                window = (f'{finance.month_short(trend_keys[0])} {trend_keys[0][2:4]}'
-                          f' – {finance.month_short(trend_keys[-1])} '
-                          f'{trend_keys[-1][2:4]}')
+                order += [c for c in sorted(trend_lines) if c not in order]
                 load.append('<div class="ll-trend">')
                 for category in order:
-                    vals = trend_cats.get(category)
+                    vals = trend_lines.get(category)
                     if not vals:
                         continue
-                    latest = vals[-1]
-                    prior = vals[:-1]
-                    base = sum(prior) / len(prior) if prior else 0.0
-                    # Against the category's own average over the window, not
-                    # against last month alone: one quiet month should not read
-                    # as a collapse, and one big month should not read as a
-                    # trend. A category with no prior spend is new, which is a
-                    # different fact from a percentage.
+                    now = trend_now.get(category, 0.0)
+                    base = trend_base.get(category, 0.0)
+                    # Against the category's own average over the months
+                    # before, not against last month alone: one quiet month
+                    # should not read as a collapse, and one big month should
+                    # not read as a trend. A category with no prior spend is
+                    # new, which is a different fact from a percentage.
                     if base <= 0:
-                        tone, delta = ("new", "new") if latest > 0 else ("flat", "&mdash;")
+                        tone, delta = ("new", "new") if now > 0 else ("flat", "&mdash;")
                     else:
-                        pct = (latest - base) / base * 100.0
+                        pct = (now - base) / base * 100.0
                         if abs(pct) < 1:
                             tone, delta = "flat", "0%"
                         elif pct > 0:
@@ -1430,25 +1609,23 @@ with stage:
                         else:
                             tone, delta = "down", f"{pct:.0f}%"
                     colour = theme.platform_color(category)
-                    spark = theme.trend_svg(
-                        vals, colour,
-                        label=f"{category}: {window}, "
-                              f"peak {finance.money(max(vals), 0)}")
+                    # The hover label says what the line is as well as what it
+                    # peaks at — a cumulative day line and a month-per-step
+                    # line look alike and mean very different things.
+                    peak = max(vals) if vals else 0.0
+                    reading = (f"{category}: {trend_axis}, "
+                               f"{'nothing spent' if peak <= 0 else 'reaching ' + finance.money(peak, 0)}")
+                    spark = theme.trend_svg(vals, colour, label=reading)
                     load.append(
                         f'<div class="ll-trend-row">'
                         f'<div class="ll-plat" style="background:{colour}">'
                         f'{theme.platform_code(category)}</div>'
                         f'<div class="ll-trend-name">{esc(category)}</div>'
                         f'{spark}'
-                        f'<div class="ll-trend-amt">{finance.money(latest, 0)}</div>'
+                        f'<div class="ll-trend-amt">{finance.money(now, 0)}</div>'
                         f'<div class="ll-trend-delta {tone}">{delta}</div>'
                         f'</div>')
-                load.append(
-                    f'<div class="ll-trend-foot">{esc(window)} &middot; each line is '
-                    'scaled to its own peak, so the shapes compare a category '
-                    'with its own past rather than with each other. The change '
-                    'is the latest month against that category&rsquo;s average '
-                    'over the window.</div>')
+                load.append(f'<div class="ll-trend-foot">{trend_foot}</div>')
                 load.append('</div>')
         load += ['</div></div>']
         html(*load)
@@ -1531,16 +1708,19 @@ with stage:
              '<div class="ll-oblig-note">cash + owed to you &minus; you owe</div></div>',
              '</div></div>')
 
-    # ---- where the money came from ----------------------------------------
+    # ---- where the money came from, and when it left ----------------------
     # The mirror of Platform load. Every income row has carried a source since
     # the first version and nothing grouped them, so the board could say where
     # the money went in eight ways and where it came from in none.
     #
-    # Full width rather than a third panel in either column: the two-column row
-    # above is balanced, and dropping this into one side would strand the other.
-    sources = finance.income_by_source(frames, snap.key)
-    if not sources.empty:
-        spacer(16)
+    # A pair, not a full-width strip. On its own this panel ran the width of
+    # the board with a ring and two lines in it and half a metre of empty
+    # enamel to the right — most people's income is one or two sources, so the
+    # widest panel on the board was reliably the emptiest. Half the width fits
+    # what it actually holds, and the calendar beside it fills the rest with
+    # the question this panel cannot answer: not where the money came from but
+    # when it went.
+    def source_panel(sources) -> list:
         src_total = float(sources["amount"].sum()) or 1.0
         recs = sources.to_dict("records")
         ring = theme.donut_svg(
@@ -1561,13 +1741,32 @@ with stage:
                 f'<div class="ll-load-pct">{got / src_total * 100:.0f}%</div>'
                 f'<div class="ll-load-amt">{finance.money(got, 0)}</div>'
                 '</div>')
-        html('<div class="ll-panel"><div class="ll-panel-head">',
-             f'<div class="ll-panel-title">{icons.icon("arrival", 15)}'
-             'Where it came from</div>',
-             f'<div class="ll-col-sum">{finance.money(src_total, 0)}</div>',
-             '</div><div class="ll-panel-body"><div class="ll-load">',
-             f'<div class="ll-donut-wrap">{ring}</div>',
-             '<div class="ll-load-list">', *rows, '</div></div></div></div>')
+        return ['<div class="ll-panel ll-panel-fill">',
+                '<div class="ll-panel-head">',
+                f'<div class="ll-panel-title">{icons.icon("arrival", 15)}'
+                'Where it came from</div>',
+                f'<div class="ll-col-sum">{finance.money(src_total, 0)}</div>',
+                '</div><div class="ll-panel-body"><div class="ll-load">',
+                f'<div class="ll-donut-wrap">{ring}</div>',
+                '<div class="ll-load-list">', *rows, '</div></div></div></div>']
+
+    sources = finance.income_by_source(frames, snap.key)
+    calendar_html = spending_calendar(frames, snap)
+    if not sources.empty or calendar_html:
+        spacer(16)
+    if not sources.empty and calendar_html:
+        s_left, s_right = st.columns(2, gap="medium")
+        with s_left:
+            html(*source_panel(sources))
+        with s_right:
+            html(calendar_html)
+    elif not sources.empty:
+        # Nothing to pair it with — All Time has no calendar, since a rhythm
+        # needs a month to have a rhythm within. It takes the width back
+        # rather than leaving a hole beside it.
+        html(*source_panel(sources))
+    elif calendar_html:
+        html(calendar_html)
 
     # ---- the run strip -----------------------------------------------------
     if HAS_DATA and len(series) > 1:

@@ -17,6 +17,13 @@ _PATHS = {
               '<path d="M3 9h18"/><path d="M8 13h8"/><path d="M8 16.5h5"/>'),
     "platform": '<path d="M4 17h16"/><path d="M7 17V9"/><path d="M12 17V6"/><path d="M17 17v-5"/>',
     "clock": '<circle cx="12" cy="12" r="8.25"/><path d="M12 7.5V12l3 1.8"/>',
+    # A month with its days in it, for the spending calendar. The three marks
+    # on the lower row are days, not decoration — the same three-then-two
+    # rhythm the panel's own grid falls into.
+    "calendar": ('<rect x="3.75" y="5" width="16.5" height="15" rx="1.5"/>'
+                 '<path d="M3.75 9.5h16.5"/><path d="M8 3.5V6.5"/><path d="M16 3.5V6.5"/>'
+                 '<path d="M7.5 13h1"/><path d="M11.5 13h1"/><path d="M15.5 13h1"/>'
+                 '<path d="M7.5 16.5h1"/><path d="M11.5 16.5h1"/>'),
 
     # --- money ------------------------------------------------------------
     "wallet": ('<path d="M3.75 7.5A2.25 2.25 0 0 1 6 5.25h11.25A1.75 1.75 0 0 1 19 7v1"/>'

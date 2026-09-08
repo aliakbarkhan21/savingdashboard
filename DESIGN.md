@@ -354,11 +354,19 @@ A dropdown must not behave like a text field. Streamlit renders every `st.select
 
 It is set by a MutationObserver in the parent document, not a one-off pass: Streamlit rebuilds these inputs on rerun, and several never exist at first paint at all — the Settings dialog and the Import tab mount their own later. The cost is that reaching a distant option is now scrolling rather than typing; the command palette is the keyboard route, and it is why losing type-to-filter on the period picker is affordable.
 
+**A selectbox does not redraw its own closed text when only the label of the selected option changes.** Switching the board to dollars repaints every figure on it and the period picker went on reading `SEP 26  Rs. 34,080`. Opening the dropdown is what located the fault: the options inside it were already in dollars while the collapsed field above them was not. Streamlit does send the new strings — the combobox seeds its input text from the selected option and reseeds only when the selected *index* moves, and the index had not moved. Nothing on the Python side can reach that text.
+
+The fix is to change the widget's key, which changes its identity, which remounts it. The key is a hash of the **rendered labels**, not of the currency: any run whose labels read the same reuses the same widget and keeps its focus and scroll, and any run whose labels changed — a currency switch, a rate refresh, an expense added to a month listed there — gets a fresh one. Anything whose visible text is computed rather than literal needs this; anything whose text is a constant does not.
+
 ### The Corner Cluster
 Three 39px squares, hard right on the toolbar row, icon-only and unlabelled: theme, Finance Bot, Settings. Light/dark leads, because it changes how everything else looks while the other two open things. They live in one keyed container rather than three columns — as separate columns the space between them was the row's gap plus each column's leftover width, which read as unrelated marks rather than one cluster.
 
 ### Segmented Control
 Two labels over one hidden checkbox, used for the Platform Load panel's Share / Trend switch. Pure CSS, so the swap costs no rerun and no scroll position — the same bargain `.ll-expand` strikes on the ledger columns. The active segment is lit *and* `pointer-events: none`, so clicking the option already showing does nothing.
+
+The lit half is **one thumb that travels**, a `::before` on the track translated by its own width, not a fill cross-faded between the two labels. Cross-fading is the cheaper build and it reads as two lamps rather than one switch: nothing moves, so nothing connects the state you left to the one you arrived at. The thumb is sized off the track and not off the words — the labels are forced to `flex: 1 1 0` with a shared min-width, so each is exactly half and a `50% - 2px` thumb lands true whatever the two words are.
+
+The travel is a `transition`, deliberately, not an animation: a transition fires on a real state change and stays silent on load, which is what keeps the Rerun Rule intact. The two views themselves still swap instantly for the same reason — a keyframed fade on the panel body would replay on every rerun.
 
 Radios would be the obvious way to get that and they do not work: a radio hidden with `display: none` is never activated by a click on its label. Measured — flipping the very same element's `type` to `checkbox` and clicking the same label checked it, with the label/control association identical either way.
 
@@ -366,6 +374,11 @@ Radios would be the obvious way to get that and they do not work: a radio hidden
 An empty chat input must be one row tall. Its row sizes to the textarea's content, and for an empty field the content is the **placeholder** — so the moment "Message the bot" wraps, the empty box grows to two or three rows. The placeholder is therefore held to one line (`::placeholder { white-space: nowrap; text-overflow: ellipsis }`), which touches only the empty state; typed text still wraps and auto-grows to the 7.5em cap.
 
 Two things made it wrap: a genuinely narrow rail, and the font swap. Barlow loads with `font-display: swap`, so the first layout is measured in the wider fallback face — which is why the same window width gave 42px on one load and 97px on the next, and why typing a character and deleting it snapped it back. Do not try to fix this by out-specifying the row's flex: Streamlit ships its own `:has(> [data-testid="stChatInputTextArea"]) { flex: 1 1 auto }`, and that rule is correct — growing with content is wanted. The bug was what the row was measuring.
+
+### The Log Takes The Room
+The prompts and the composer are held at the foot of the rail by `margin-top: auto` on the first prompt button, and that auto margin is what used to eat the slack: with the log capped at a fixed 300px, a tall window put ~300px of dead panel *between* the last reply and the first prompt — a gap you could see, inside a box you could not fill.
+
+Letting the log take that space fixes it without moving anything else. Flex resolves flexible lengths **before** it hands free space to auto margins, so a growing log leaves the margin nothing to take and everything below stays exactly where it was; shrinking works the same way in reverse, so a short window gives room back rather than pushing the composer down. Three declarations, all load-bearing: `flex: 1 1 auto` (basis stays `auto`, not 0, so the box is still content-sized if it ever lands in an unbounded parent, where a 0 basis would collapse it to nothing), `height: auto` (`st.container(height=)` writes a pixel height there and it pins the basis), and a `min-height` floor so a very short window scrolls the rail rather than squeezing the log out of existence. Verified 500px–1440px tall and in the phone drawer: the composer is on screen at every one.
 
 ### Panel Fill
 Streamlit columns stretch to the tallest of them; the five divs between a column and a panel do not. A panel that should fill its column takes `.ll-panel-fill`, and the stretch rules hang off that class rather than off a positional `:has(> div > div)` chain — a chain anchored on nothing is what silently stops matching on an upgrade. The emotion wrapper in the middle of that chain centres its child, so it is put back to `stretch`.
@@ -376,7 +389,7 @@ Open debts rolled up per person, in the Debts tab above the two ledger tables. T
 Direction is carried by the words ("owes you" / "you owe") and by which edge is lit, never by tinting the card: status hue doing its one job, not a third. Settled debts are excluded — counting them would make someone who always pays you back look identical to someone who never has.
 
 ### Arrivals Ring
-The mirror of Platform load, full width beneath the two-column row. Drawn in **amber tints stepped by share**, not in categorical hues: income sources are whoever happened to pay you, not a taxonomy, so giving them their own palette would put hue to a third job and imply a scheme that does not exist. Amber is the board's own light and the arrivals side reads in it.
+The mirror of Platform load, in the left half of the row beneath the two-column row, paired with the Spending Calendar. It ran the full width to begin with, and full width was wrong for it: most people's income is one or two sources, so the widest panel on the board was reliably the emptiest — a ring, two lines, and half a metre of empty enamel. Drawn in **amber tints stepped by share**, not in categorical hues: income sources are whoever happened to pay you, not a taxonomy, so giving them their own palette would put hue to a third job and imply a scheme that does not exist. Amber is the board's own light and the arrivals side reads in it.
 
 The colour is emitted in `style`, not the `stroke` attribute — a presentation attribute takes a literal colour and will not resolve a `var()`, which is what a tint is.
 
@@ -385,6 +398,21 @@ When a setting that changes the reported numbers is missing, the board says so, 
 
 ### Sparkline
 `theme.trend_svg` — a polyline over a 15%-opacity area fill in the category's own hue, last point marked, 104×26. Each line is scaled to **its own peak**, not a shared one: the question is whether a category is rising against its own past, and a shared scale would answer a different question while flattening every small category into a straight line. The amount beside each row is what makes categories comparable.
+
+**The axis is the period on screen.** A month view draws that month's days; All Time, and only All Time, draws one step per month. This was the other way round to begin with — a fixed window of the last twelve months on record, identical whatever period you were reading — and the failure was not subtle once a short ledger hit it: under "August 2026" every figure in the panel was September's, and on a three-month ledger four categories read *Rs. 0 · −100%* beneath a mountain, because the mountain was months the board was not showing.
+
+Within a month the line is **cumulative**, not per-day. Per-day, a category with four purchases in it is four spikes on an empty floor — noise at 104×26, and indistinguishable from any other category with four purchases somewhere else. Cumulative, the same row has a shape: a step then flat is one big buy, a steady climb is a habit, a late kick is a month that got away at the end. And a category that was not touched is a **flat line on the floor**, which is the one thing the month-window version could never draw and the reason it drew mountains instead.
+
+A category with history but nothing this month still gets a row. "You have stopped spending on this" is a real answer, and dropping the row would hide the very change worth seeing.
+
+### Spending Calendar
+The month as a grid of days, each tinted by what left that day. The board could say how much a month spent and which categories took it, and nothing at all about *when* — yet a payday spike, three quiet weeks and a weekend that got away all add up to the same donut.
+
+Amber, the hue the run strip already gives the month in progress, scaled to the month's own heaviest day — an absolute scale would make a quiet month look like an empty one. `sqrt`, not linear: with one big day and twenty small ones a linear ramp puts the twenty at alphas nobody can tell apart, which is the failure mode of every heatmap that scales the way the numbers do rather than the way the eye does.
+
+**The ramp stops at 0.45, and that ceiling is legibility, not taste.** Each cell carries its date, and a tint is the panel and the amber mixed — so in dark mode the fill climbs *towards* the ink as it heats and in light mode it falls towards it. Measured both ways, 0.45 is where the date still clears 4.5:1 in the worse of the two (5.4:1 dark, 6.6:1 light). The first draft ran to 0.90 and the heaviest days had dates on them nobody could read. Note also that the date takes `--ink`, **not** the fixed `--chip-ink` a platform badge uses: a chip is a solid saturated swatch that has to ignore the theme, while a day cell sits near the panel's own surface in both modes, which is exactly the ground `--ink` is for.
+
+Days that have not happened yet are outlined and empty, never counted as quiet: telling someone on the 3rd that they have had a wonderfully frugal month is worse than saying nothing. All Time has no calendar at all — a rhythm needs a month to have a rhythm within — and the Arrivals Ring takes the full width back when there is nothing to pair it with.
 
 ### Command Palette
 Ctrl/Cmd+K. An overlay in the parent document at `--radius-lg` on `--lift-3`, themed from the board's own custom properties. Choosing an item clicks an off-screen Streamlit button — the same bridge idea the board rows use — or, for a filter, drives the toolbar's existing search box rather than introducing a second filter with its own rules. It does not intercept Ctrl+K while focus is in the bot composer, where that chord belongs to the text field.

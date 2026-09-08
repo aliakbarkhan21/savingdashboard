@@ -49,11 +49,13 @@ back to the last known set when offline.
 the Platform Load panel, plus a projected month-end close from the current daily
 burn.
 
-**Trends across months.** The Platform Load panel switches between *Share* — the
-donut for the open month — and *Trend*, a twelve-month sparkline per category
-with the latest month set against that category's own average. Answers "is my
-Food spending rising", which a single-month view cannot. The switch is pure CSS,
-so it costs no reload.
+**Trends.** The Platform Load panel switches between *Share* — the donut for the
+open month — and *Trend*, a sparkline per category with its total set against
+that category's own average over the months before. Answers "is my Food
+spending rising", which a single figure cannot. The graph follows the period on
+screen: a month draws its own days, cumulative, so a step then flat is one big
+purchase and a category you did not touch is a flat line; All Time draws one
+step per month. The switch is pure CSS, so it costs no reload.
 
 **Net worth.** Cash on hand plus what is owed to you, minus what you owe, beside
 the two figures it is made of.
@@ -61,6 +63,10 @@ the two figures it is made of.
 **Where it came from.** The mirror of Platform load: a ring of the month's
 income by source, drawn in amber rather than category colours because a
 source is whoever paid you, not a category.
+
+**When it went.** Beside it, the month as a grid of days, each tinted by what
+left that day — the shape of a month, which the donut cannot show. Names the
+quiet days and the heaviest one, and counts only the days that have happened.
 
 **Debts by person.** One card per person with both directions netted, so
 someone you have both lent to and borrowed from shows as a single number.

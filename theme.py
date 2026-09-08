@@ -180,11 +180,15 @@ def donut_svg(records, total, center_label="", size=184, thickness=24,
 
 
 def trend_svg(values, colour, width=104, height=26, label=""):
-    """Inline sparkline for one category's spend across months.
+    """Inline sparkline for one category, over whatever steps it is handed.
+
+    Two callers, two axes: a month view passes that month's days (cumulative,
+    so the line only ever climbs), and All Time passes one step per month.
+    Nothing here needs to know which — it draws the numbers it is given.
 
     Scaled to its OWN peak, not to a scale shared with the other categories.
-    The question this answers is "is this line rising", which is about a
-    category against its own past; a shared scale would answer a different
+    The question this answers is "what shape is this category", which is about
+    a category against its own past; a shared scale would answer a different
     question and would flatten every small category into a straight line while
     it did so. The amount beside each row is what makes them comparable.
     """
@@ -1052,6 +1056,67 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   width: 12px; height: 12px; border-radius: var(--radius-tile);
   display: inline-block; justify-self: center;
 }
+/* Half-width now, and a ring plus a list of two does not always fit side by
+   side once the board is narrow. Wrapping puts the list under the ring rather
+   than crushing either — and only when it has to. */
+.ll-load { flex-wrap: wrap; }
+
+/* ---- the spending calendar --------------------------------------------
+   Days are mechanism, so they take --radius-tile like every other cell on
+   the board: flaps, chips, meter tracks. A month is a grid of hard little
+   squares, not a row of pills.
+   
+   aspect-ratio rather than a height, so the grid keeps its shape at any panel
+   width without a media query per breakpoint. */
+.ll-cal {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 4px; max-width: 380px;
+}
+.ll-cal-dow {
+  font-family: var(--font-board); font-size: var(--t-micro);
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3);
+  text-align: center; padding-bottom: 2px;
+}
+.ll-cal-pad { aspect-ratio: 1; }
+.ll-cal-day {
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-tile);
+  background: rgba(var(--ink-rgb), 0.035);
+  font-family: var(--font-board); font-size: var(--t-micro);
+  font-weight: 600; color: var(--ink);
+  transition: transform 140ms var(--ease), box-shadow 140ms var(--ease);
+}
+/* The theme's own ink, NOT the fixed chip ink a platform badge uses. A chip is
+   a solid saturated swatch, so it needs an ink that ignores the theme; a day
+   here is the panel and the amber mixed at an alpha that is usually low, which
+   keeps it near the panel's own surface in both modes. That is exactly the
+   ground --ink is for, and it is why the alpha ramp is capped — see
+   spending_calendar() in app.py for the measurements. */
+/* --ink-2, not the --ink-3 a caption would take. A quiet day is still a date
+   somebody reads, and measured on the light panel --ink-3 came out at 4.0:1 —
+   under the line, and the only cell in the grid that was. */
+.ll-cal-day.is-quiet, .ll-cal-day.is-future {
+  color: var(--ink-2); background: rgba(var(--ink-rgb), 0.035);
+}
+.ll-cal-day.is-future {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--rule);
+  opacity: 0.55;
+}
+.ll-cal-day.is-today { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.ll-cal-day:hover { transform: translateY(-2px); box-shadow: var(--lift-1); }
+.ll-cal-day.is-today:hover {
+  box-shadow: inset 0 0 0 1.5px var(--ink), var(--lift-1);
+}
+.ll-cal-foot {
+  padding-top: var(--s3); font-size: var(--t-micro); color: var(--ink-3);
+  line-height: 1.5;
+}
+.ll-cal-foot b { color: var(--ink-2); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  .ll-cal-day { transition: none; }
+  .ll-cal-day:hover { transform: none; }
+}
 .ll-load-item {
   display: grid; grid-template-columns: 30px 1fr auto auto; align-items: center;
   gap: var(--s3); padding: 7px 0; border-bottom: 1px solid var(--rule);
@@ -1128,25 +1193,54 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
    nothing, which is what a segmented control does. */
 .ll-vr { display: none !important; }
 .ll-panel-tools { display: flex; align-items: center; gap: var(--s3); }
+/* One thumb that MOVES, not two backgrounds that swap.
+   
+   Cross-fading a fill on one label while fading it out on the other is the
+   cheap version of this control, and it reads as two lamps rather than one
+   switch: nothing travels, so nothing connects the state you left to the one
+   you arrived at. A single pseudo-element sliding the width of one segment
+   says "these are two positions of the same control" without a word.
+   
+   The thumb is sized off the track, not off the labels, which is why the
+   labels are forced to equal widths: at `flex: 1 1 0` with a shared
+   min-width, "Share" and "Trend" occupy exactly half each and a 50% thumb
+   lands true whatever the two words are. The container's 2px padding is the
+   track inset, so the thumb is `50% - 2px` wide and travels 100% of itself. */
 .ll-seg {
-  display: inline-flex; gap: 2px; padding: 2px;
+  position: relative;
+  display: inline-flex; gap: 0; padding: 2px;
   background: var(--shade-soft); border-radius: var(--radius-sm);
 }
+.ll-seg::before {
+  content: ""; position: absolute; z-index: 0;
+  top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px);
+  background: var(--panel-3); box-shadow: var(--lift-1);
+  border-radius: calc(var(--radius-sm) - 2px);
+  transition: transform 240ms var(--ease);
+}
+#ll-view:checked ~ .ll-panel-head .ll-seg::before {
+  transform: translateX(100%);
+}
 .ll-seg label {
+  position: relative; z-index: 1;
+  flex: 1 1 0; min-width: 52px; text-align: center;
   font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.02em;
   padding: 4px 10px; border-radius: calc(var(--radius-sm) - 2px);
   color: var(--ink-3); cursor: pointer; user-select: none;
-  transition: background 140ms var(--ease), color 140ms var(--ease);
+  transition: color 240ms var(--ease);
 }
 .ll-seg label:hover { color: var(--ink); }
+/* The active label is inert: clicking the segment you are already on would
+   toggle the checkbox and throw you to the other view. */
 .ll-seg .seg-share,
 #ll-view:checked ~ .ll-panel-head .ll-seg .seg-trend {
-  background: var(--panel-3); color: var(--ink); box-shadow: var(--lift-1);
-  pointer-events: none;
+  color: var(--ink); pointer-events: none;
 }
 #ll-view:checked ~ .ll-panel-head .ll-seg .seg-share {
-  background: transparent; color: var(--ink-3); box-shadow: none;
-  pointer-events: auto;
+  color: var(--ink-3); pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ll-seg::before, .ll-seg label { transition: none; }
 }
 .ll-trend { display: none; }
 #ll-view:checked ~ .ll-panel-body .ll-load { display: none; }
@@ -2216,12 +2310,32 @@ div.st-key-close_rail button span[class*="material"] { font-size: 17px !importan
   margin-left: auto !important;
 }
 
-/* ---- the composer stays on screen ----
-   The log is a scroll box, so anything it cannot show is reachable by
-   scrolling inside it; the composer is not, and being pushed past the fold
-   made the panel look broken once a conversation started. Clamped against
-   the viewport rather than a fixed pixel height, because the room left over
-   is a function of screen height, which no constant can predict. */
+/* ---- the log takes the room, the composer keeps its place ----
+   The composer must stay on screen: it is not inside a scroll box, so being
+   pushed past the fold makes the panel look broken. The prompts and composer
+   are held at the foot of the rail by `margin-top: auto` on .st-key-starter_0
+   (twice, once per breakpoint) — and that is what used to eat the slack. An
+   auto margin absorbs free space, so with the log capped at a fixed 300px a
+   tall window put ~300px of dead panel BETWEEN the last reply and the first
+   prompt: a gap you could see, inside a box you could not fill.
+
+   Letting the log take that space instead fixes it without moving anything.
+   Flex resolves flexible lengths BEFORE it distributes free space to auto
+   margins, so a growing log leaves the margin nothing to take and everything
+   below stays exactly where it was. Shrinking works the same way in reverse:
+   on a short window the log gives room back rather than pushing the composer
+   down.
+
+   Three declarations, and all three are load-bearing:
+     flex: 1 1 auto   grow into the slack, shrink when there is none. The
+                      basis stays `auto` rather than 0 so the box is still
+                      content-sized if it ever lands in an unbounded parent,
+                      where a 0 basis would collapse it to nothing.
+     height: auto     st.container(height=) writes a pixel height here; left
+                      alone it pins the basis and nothing flexes.
+     min-height       a floor, so a very short viewport scrolls the rail —
+                      which its own overflow-y already handles — rather than
+                      squeezing the log out of existence. */
 /* The keyed element IS the log's own stVerticalBlock, so it is the only
    thing that may carry this. An earlier version also listed
    `.st-key-bot_log [data-testid="stVerticalBlock"]`, which matched every
@@ -2229,17 +2343,23 @@ div.st-key-close_rail button span[class*="material"] { font-size: 17px !importan
    one its own clamp and scrollbar: a stack of nested scroll tracks with the
    replies clipped and printing over each other. */
 div.st-key-bot_log {
-  max-height: clamp(120px, 30vh, 300px) !important;
-  /* Paired with the clamp, never without it: a max-height that nothing
-     scrolls just prints the overflow over whatever comes next. */
+  height: 100% !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  /* Paired with the fill, never without it: a box that grows past its
+     content is fine, but one whose content outgrows IT has to scroll or the
+     replies print over whatever comes next. */
   overflow-y: auto !important;
 }
 /* st.container(height=) puts the pixel height on a wrapper *around* the
-   keyed element, so clamping the keyed element alone left the wrapper at its
-   full height and the saving never reached the layout. Direct child only —
+   keyed element, so sizing the keyed element alone left the wrapper at its
+   full height and the change never reached the layout. Direct child only —
    an unscoped :has() also matches the rail's outer wrapper. */
 [data-testid="stLayoutWrapper"]:has(> .st-key-bot_log) {
-  max-height: clamp(120px, 30vh, 300px) !important;
+  flex: 1 1 auto !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 140px !important;
 }
 
 /* The chat switcher is three small controls that Streamlit's own column

@@ -123,11 +123,20 @@ rollup. Debts can optionally ignore the month filter, since they carry across mo
 
 **Reading across months.** Month-scoping answered "where did this month's money go" and
 could not answer "is my Food spending rising", which is the more useful question and the
-one a spreadsheet answers badly. The Platform Load panel now switches between **Share**
-(the donut) and **Trend** (a 12-month sparkline per category, with the latest month set
-against that category's own average over the window). Both read `finance._category_totals`,
-so the donut and the trend can never disagree — that shared helper is the point of the
-refactor, not a tidiness exercise. The switch is a pure-CSS checkbox: no rerun.
+one a spreadsheet answers badly. The Platform Load panel switches between **Share** (the
+donut) and **Trend**: a sparkline per category, its total for the period, and that total
+against the category's own average over the months before. Both read
+`finance._category_totals`, so the donut and the trend can never disagree — that shared
+helper is the point of the refactor, not a tidiness exercise. The switch is a pure-CSS
+checkbox: no rerun, and the lit half slides rather than cross-fading.
+
+The graph is scoped to **the period on screen**. It was not, at first — it drew a fixed
+window of the last twelve months on record whatever period you were reading, so the panel
+under "August" was a September graph with September's figures in it, and on a short ledger
+four categories read *Rs. 0 · −100%* beneath a mountain drawn from months the board was
+not showing. On a month the line is now that month's days, cumulative; All Time, and only
+All Time, is one step per month. A category that was not touched is a flat line, which was
+the whole complaint and the one thing the old window could not draw.
 
 **Net worth is on the board.** `Snapshot.net_worth` had existed since the obligations panel
 shipped and only the bot could see it — the two figures it is made of sat side by side on
@@ -156,8 +165,17 @@ visible. Open debts only.
 
 **Where the money came from.** `income.source` was captured on every row and never
 grouped, so the board could say where money went in eight ways and where it came from in
-none. A full-width ring mirrors Platform load, drawn in amber tints rather than
-categorical hues — sources are not a taxonomy, and a third job for colour is a bug.
+none. A ring mirrors Platform load, drawn in amber tints rather than categorical hues —
+sources are not a taxonomy, and a third job for colour is a bug. It takes half the row,
+not the full width it started at: most people's income is one or two sources, so as a
+full-width panel it was reliably the emptiest thing on the board.
+
+**When the money went.** The other half of that row is a calendar of the month, each day
+tinted by what left it. The board could say how much a month spent and which categories
+took it and nothing at all about *when* — yet a payday spike, three quiet weeks and a
+weekend that got away all add up to the same donut. It reports the quiet days and the
+heaviest one, counts only days that have actually happened, and does not appear on All
+Time, where a month has no rhythm to have.
 
 **A baseline for the burn rate.** The Capacity projection reported a daily pace with
 nothing to compare it against, which only someone who already knew their habits could
