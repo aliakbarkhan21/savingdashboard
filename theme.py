@@ -1106,13 +1106,18 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   display: grid; grid-template-columns: repeat(7, 1fr) auto;
   gap: 4px; max-width: 460px;
 }
-.ll-cal-dow.is-sum { padding-left: 6px; }
+/* The margin needs a gutter, not the 4px the day cells sit on: at the grid's
+   own gap the totals read as an eighth column of the calendar rather than as
+   an annotation beside it. Margin, NOT padding — these cells are right-aligned,
+   so left padding moves the figure inside its box and leaves the column
+   exactly where it was. */
+.ll-cal-dow.is-sum { margin-left: var(--s4); }
 /* The row total sits in the margin, not in the grid: no fill, no border, and
    the board's tabular figure face, so it reads as an annotation of the week
    rather than as an eighth day. */
 .ll-cal-sum {
   display: flex; align-items: center; justify-content: flex-end;
-  padding-left: 6px;
+  margin-left: var(--s4);
   font-family: var(--font-board); font-size: var(--t-micro);
   font-weight: 600; color: var(--ink-2); white-space: nowrap;
 }
