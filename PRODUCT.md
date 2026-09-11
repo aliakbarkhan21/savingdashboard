@@ -107,9 +107,22 @@ like a default.
 **Five ledgers:** `expenses` (date, description, category, amount), `transport`
 (date, amount), `income` (date, source, amount), `lent` (date, person, amount,
 paid_back, settled_date, kind), `borrowed` (date, lender, amount, paid_back,
-settled_date, kind). `kind` is `cash` or `covered`; `init_db` adds it to older files and
-backfills `cash`, which is correct for them — before the column existed there was no way
-to record a debt where no money changed hands.
+settled_date, kind). `kind` is `cash`, `covered` or `owed`; `init_db` adds it to older
+files and backfills `cash`, which is correct for them — before the column existed there
+was no way to record a debt where no money changed hands.
+
+`kind` answers one question: did cash move when this started? `cash` says yes. `covered`
+says no, because you paid for something on their behalf — the purchase itself is what took
+the money out. `owed` says no because nothing was handed over and nothing was bought: money
+earned and not yet paid — a salary running late, an invoice out, a deposit due back. It is
+recorded from the sidebar as its own movement type, **Owed to me**, and it is only ever
+written on the `lent` side, since it is money owed *to* you.
+
+The arithmetic stays binary even though the column now has three values: every place in
+`finance.py` that cares asks `kind == db.CASH`, so a non-cash value can never invent an
+opening leg. `owed` therefore leaves cash on hand alone, raises what you are owed and your
+net worth, logs no departure, and books the money as that day's arrival when it is finally
+ticked settled — all verified against `snapshot()` rather than assumed.
 
 Amounts are stored as integer paisa, converted at the storage boundary, so the rest of the
 app works in rupee floats and never sees paisa.

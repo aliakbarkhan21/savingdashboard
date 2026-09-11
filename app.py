@@ -209,6 +209,16 @@ DEBT_HOW = {
 }
 
 
+# What the debts table calls each kind. Separate from DEBT_HOW because that is
+# the question the Lent-out form asks, and OWED is not one of its answers — it
+# has a movement type of its own in the sidebar. A table still has to name it,
+# and a Selectbox column errors on a value that is not in its options.
+DEBT_KIND_LABELS = {
+    "lent": {db.CASH: "Cash", db.COVERED: "Covered", db.OWED: "Owed"},
+    "borrowed": {db.CASH: "Cash", db.COVERED: "Covered"},
+}
+
+
 def _current_max_ids() -> dict:
     getters = {"expenses": db.get_expenses, "transport": db.get_transport,
                "income": db.get_income, "lent": db.get_lent,
@@ -522,6 +532,48 @@ def spending_calendar(frames, snap) -> str:
     on them nobody could read. What that ceiling costs is a little range at the
     top, and the range was never the point — the hover carries the figure, the
     grid only has to show the shape.
+
+    ---- the flip ----
+
+    A tint says a day was heavy. It cannot say what made it heavy, and that is
+    the question a heavy square actually provokes. So every day that has
+    happened is a label over a hidden radio, and checking one turns the card
+    over onto that day's breakdown: platform, share, amount.
+
+    No rerun, no round trip, no component. The same hidden-input pattern the
+    Share/Trend switch already uses (.ll-vr): all of it renders once, and the
+    browser does the rest. A Streamlit callback would cost a full script run
+    — the whole board rebuilt, the flaps re-evaluated — to show something the
+    page already had in hand, and the flip would land after the rerun rather
+    than under the finger.
+
+    Each input is emitted immediately BEFORE the panel it reveals, so one
+    static rule (`.ll-vr:checked + .ll-day`) does the whole job. The first
+    draft put every input at the top of the panel and matched them by day
+    number, which needs a generated <style> block of up to 31 selectors rebuilt
+    on every render; adjacency needs none.
+
+    CHECKBOXES, NOT RADIOS, and this is measured rather than preferred. A radio
+    group is the obvious fit — one day open at a time, for free — and it does
+    not work here: inside Streamlit's React root a click on a named radio sets
+    checkedness during dispatch and then loses it again before the event
+    finishes, with no `change` event and `defaultPrevented` false the whole way
+    to the window. The same markup works on document.body, and cloning the
+    nodes makes them work in place, so it is the original nodes and React's
+    delegated listener between them, not the CSS: transform, backface,
+    pointer-events and the display swap were each disabled in turn and none of
+    them changed it. Checkboxes are unaffected — the Share/Trend switch has
+    been one all along.
+
+    What a checkbox costs is that nothing unchecks the last day for you, so
+    each panel carries its own Back label pointing at its own box, and the
+    front face goes pointer-events:none while the card is turned — you cannot
+    reach a second day without closing the first. The stylesheet keeps a
+    belt-and-braces rule that shows only the first checked panel anyway.
+
+    The other trade-off, stated plainly: a display:none input is not in the tab
+    order, so the flip is pointer-only — the same limitation the Share/Trend
+    switch already carries, and the reason every cell keeps its hover title.
     """
     daily = finance.daily_outflow(frames, snap.key)
     if not daily or sum(daily) <= 0:
@@ -536,6 +588,7 @@ def spending_calendar(frames, snap) -> str:
     # had a wonderfully frugal month.
     today = date.today().day if snap.key == CURRENT_PERIOD else days
     elapsed = min(today, days)
+    by_day = finance.category_by_day(frames, snap.key)
 
     # Every row of the grid is already a week, so each one takes its own total
     # in the margin — the way a spreadsheet totals a row. It costs no new
@@ -564,7 +617,8 @@ def spending_calendar(frames, snap) -> str:
         weekday = _DOW_FULL[(lead + index) % 7]
         classes = ["ll-cal-day"]
         style = ""
-        if day > elapsed:
+        future = day > elapsed
+        if future:
             classes.append("is-future")
             title = f"{weekday} {day:02d} — not yet"
         elif amount <= 0:
@@ -574,13 +628,22 @@ def spending_calendar(frames, snap) -> str:
         else:
             alpha = 0.12 + 0.33 * (amount / peak) ** 0.5
             style = f' style="background:rgba(var(--amber-rgb),{alpha:.3f})"'
-            title = f"{weekday} {day:02d} — {finance.money(amount, 0)}"
+            title = (f"{weekday} {day:02d} — {finance.money(amount, 0)}"
+                     "  ·  click for the breakdown")
             week_spend += amount
             week_seen = True
         if day == today and snap.key == CURRENT_PERIOD:
             classes.append("is-today")
-        cells.append(f'<div class="{" ".join(classes)}"{style} title="{esc(title)}">'
-                     f'{day}</div>')
+        if future:
+            # Nothing to turn over. A day that has not happened has no
+            # breakdown, and a card that flipped to "nothing spent" on the 29th
+            # would be answering a question nobody asked.
+            cells.append(f'<div class="{" ".join(classes)}" '
+                         f'title="{esc(title)}">{day}</div>')
+        else:
+            cells.append(f'<label class="{" ".join(classes)} is-live" '
+                         f'for="llcd-{day}"{style} title="{esc(title)}">'
+                         f'{day}</label>')
         slot += 1
         if slot == 7:
             cells.append(close_week())
@@ -591,6 +654,54 @@ def spending_calendar(frames, snap) -> str:
         cells += ['<div class="ll-cal-pad"></div>'] * (7 - slot)
         cells.append(close_week())
 
+    # ---- the back of the card: one panel per day that has happened --------
+    month_name = finance.month_label(snap.key).split()[0]
+    backs = []
+    for day in range(1, elapsed + 1):
+        rows = by_day.get(day, [])
+        spent = sum(a for _, a in rows)
+        weekday = _DOW_FULL[(lead + day - 1) % 7]
+        backs.append(f'<input type="checkbox" id="llcd-{day}" class="ll-vr">')
+        # A day with nothing on it says so once, in the body. Repeating it as
+        # "0 platforms" and "Rs. 0" in the header is three ways of saying the
+        # same nothing, and the only one worth reading is the sentence.
+        if rows:
+            meta = f'{len(rows)} platform{"s" if len(rows) != 1 else ""}'
+            total = f'<div class="ll-day-total">{finance.money(spent, 0)}</div>'
+        else:
+            meta = 'a quiet day'
+            total = '<div class="ll-day-total is-none">&mdash;</div>'
+        head = ('<div class="ll-day-head"><div class="ll-day-when">'
+                f'<b>{weekday} {day} {esc(month_name)}</b>'
+                f'<span>{meta}</span></div>'
+                f'{total}</div>')
+        if rows:
+            body = ['<div class="ll-day-list">']
+            for category, value in rows:
+                share = value / spent * 100 if spent else 0.0
+                colour = theme.platform_color(category)
+                body.append(
+                    '<div class="ll-day-row">'
+                    f'<div class="ll-plat" style="background:{colour}">'
+                    f'{theme.platform_code(category)}</div>'
+                    f'<div class="ll-load-name">{esc(category)}</div>'
+                    '<div class="ll-day-bar">'
+                    f'<i style="width:{share:.1f}%;background:{colour}"></i>'
+                    '</div>'
+                    f'<div class="ll-load-pct">{share:.0f}%</div>'
+                    f'<div class="ll-load-amt">{finance.money(value, 0)}</div>'
+                    '</div>')
+            body.append('</div>')
+            body = "".join(body)
+        else:
+            body = '<div class="ll-day-none">Nothing left the account.</div>'
+        # The Back label points at this day's OWN box: unchecking it is what
+        # turns the card back over, and it is the only way out, since the
+        # front face stops taking clicks while the card is turned.
+        backs.append(f'<div class="ll-day">{head}{body}'
+                     f'<label class="ll-day-close" for="llcd-{day}">'
+                     f'{icons.icon("back", 13)}Back to the month</label></div>')
+
     quiet = sum(1 for i, v in enumerate(daily) if v <= 0 and i < elapsed)
     heaviest = max(range(days), key=lambda i: daily[i])
     heavy_dow = _DOW_FULL[(lead + heaviest) % 7][:3]
@@ -598,15 +709,21 @@ def spending_calendar(frames, snap) -> str:
             if snap.key == CURRENT_PERIOD
             else f'{quiet} quiet day{"s" if quiet != 1 else ""}')
     return ''.join([
-        '<div class="ll-panel ll-panel-fill"><div class="ll-panel-head">',
+        '<div class="ll-panel ll-panel-fill ll-cal-panel">',
+        '<div class="ll-panel-head">',
         f'<div class="ll-panel-title">{icons.icon("calendar", 15)}'
         'Spending rhythm</div>',
         f'<div class="ll-col-sum">{finance.money(sum(daily), 0)}</div>',
         '</div><div class="ll-panel-body">',
+        '<div class="ll-flip-stage"><div class="ll-flip">',
+        '<div class="ll-flip-face ll-flip-front">',
         '<div class="ll-cal">', *cells, '</div>',
         f'<div class="ll-cal-foot">{note} &middot; heaviest was '
         f'<b>{heavy_dow} {heaviest + 1:02d}</b> at '
         f'<b>{finance.money(daily[heaviest], 0)}</b></div>',
+        '</div>',
+        '<div class="ll-flip-face ll-flip-back">', *backs, '</div>',
+        '</div></div>',
         '</div></div>',
     ])
 
@@ -707,7 +824,9 @@ with st.sidebar:
 
     # ---- record a movement -------------------------------------------------
     html(cap("Record a movement"))
-    kind = st.selectbox("Movement", ["Expense", "Transport", "Income", "Lent out", "Borrowed"],
+    kind = st.selectbox("Movement",
+                        ["Expense", "Transport", "Income", "Owed to me",
+                         "Lent out", "Borrowed"],
                         label_visibility="collapsed")
 
     with st.form("entry", clear_on_submit=True):
@@ -755,6 +874,34 @@ with st.sidebar:
                     st.rerun()
                 else:
                     st.warning("Needs a source and an amount above zero.")
+
+        elif kind == "Owed to me":
+            # Money earned and not yet paid: a salary running late, an invoice
+            # out, a deposit due back. It is a receivable, so it lives in the
+            # same ledger a loan does — but it is NOT a loan, and the
+            # difference is the question this form does not ask. "Lent out"
+            # has to ask whether cash left your pocket, because it usually
+            # did. Nothing left your pocket here; there was never an opening
+            # leg to record, which is exactly what db.OWED means.
+            #
+            # So: nothing is added to cash on hand now. The figure shows up in
+            # Owed to you and in net worth, and the day it is actually paid,
+            # ticking Settled books it as that day's arrival.
+            who = st.text_input("Who owes you", placeholder="Employer \u2014 August salary")
+            amount = st.number_input(f"Amount ({CURRENCY})", min_value=0.0,
+                                     step=1000.0, format="%.2f")
+            st.caption("Your cash on hand does not move \u2014 nothing has been paid "
+                       "yet. It counts towards what you are owed and towards "
+                       "net worth, and ticking Settled records the payment as "
+                       "that day's arrival.")
+            if st.form_submit_button("Record what you are owed", width="stretch",
+                                     type="primary"):
+                if who.strip() and amount > 0:
+                    db.add_lent(str(when), who.strip(), to_pkr(amount), db.OWED)
+                    _touch_data()
+                    st.rerun()
+                else:
+                    st.warning("Needs a name and an amount above zero.")
 
         elif kind == "Lent out":
             who = st.text_input("Who took it", placeholder="Sara")
@@ -2153,7 +2300,7 @@ with stage:
                     # Shown as the everyday phrase, not the stored token. The
                     # map back on write-back is by label, so both directions
                     # come from the same dict and cannot drift apart.
-                    how_labels = {k: v["short"] for k, v in DEBT_HOW[table].items()}
+                    how_labels = DEBT_KIND_LABELS[table]
                     back_to_kind = {v: k for k, v in how_labels.items()}
                     view["kind"] = view["kind"].map(
                         lambda k: how_labels.get(k, how_labels[db.CASH]))
@@ -2171,7 +2318,11 @@ with stage:
                             "kind": st.column_config.SelectboxColumn(
                                 "How", options=list(how_labels.values()), required=True,
                                 help="Cash: money changed hands when this started. "
-                                     "Covered: it did not — only settling moves cash."),
+                                     "Covered: it did not, because you paid for "
+                                     "something on their behalf. Owed: nothing was "
+                                     "handed over at all — it is money you have "
+                                     "earned and not been paid. Only Cash moves your "
+                                     "cash on hand before settlement."),
                             "days": st.column_config.NumberColumn(
                                 "Days", help="Days since this debt was recorded"),
                             "paid_back": st.column_config.CheckboxColumn("Settled"),

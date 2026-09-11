@@ -254,12 +254,19 @@ def log_lent(person: str, amount: float, date_str: str = "", how: str = "cash") 
             on hand does not move now, because the purchase itself is what took
             the money out, and it comes back only when they settle up.
             Use "covered" for "I paid for his dinner, he owes me".
+            "owed" when nothing was handed over and nothing was bought: money
+            earned and not yet paid, such as a late salary, an invoice that is
+            out, or a deposit due back. Cash on hand does not move until it is
+            settled. Use "owed" for "work still owes me last month's salary".
     """
     d = finance.parse_date(date_str) if date_str else _today()
     k = db.clean_kind((how or "").strip().lower())
     db.add_lent(d, person.strip(), abs(float(amount)), k)
+    # Anything that is not CASH had no opening leg, so the cash sentence is the
+    # same for every one of them. Tested that way rather than against COVERED
+    # by name, so a further kind cannot quietly get the wrong sentence.
     tail = ("Your cash on hand is unchanged; it goes up when they settle."
-            if k == db.COVERED else
+            if k != db.CASH else
             "That has come out of your cash on hand until they repay.")
     return (f"Recorded {finance.money(abs(float(amount)))} owed to you by "
             f"{person.strip()} on {finance.display_date(d)}. {tail}")
@@ -285,7 +292,7 @@ def log_borrowed(lender: str, amount: float, date_str: str = "", how: str = "cas
     db.add_borrowed(d, lender.strip(), abs(float(amount)), k)
     tail = ("Your cash on hand is unchanged, since nothing was handed to you; "
             "it drops when you repay."
-            if k == db.COVERED else
+            if k != db.CASH else
             "That has been added to your cash on hand until you repay it.")
     return (f"Recorded {finance.money(abs(float(amount)))} owed by you to "
             f"{lender.strip()} on {finance.display_date(d)}. {tail}")

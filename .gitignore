@@ -29,3 +29,8 @@ __pycache__/
 .venv/
 venv/
 .impeccable/
+
+# --- editor / assistant config ------------------------------------------
+# Local tooling notes. Not part of the product and not for the public repo.
+CLAUDE.md
+.claude/

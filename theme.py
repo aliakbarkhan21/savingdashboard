@@ -819,7 +819,14 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
   76%  { transform: rotateX(-4deg);  filter: brightness(1); }
   100% { transform: rotateX(0deg);   filter: brightness(1); }
 }
-.ll-fig-value { perspective: 460px; }
+/* Perspective only while the flap is actually turning. On .ll-fig-value
+   unconditionally it gave all four figures a 3D rendering context that
+   outlived the one 560ms it exists for — a permanent compositing promotion on
+   the four largest pieces of type on the board, re-rasterised on every scroll
+   frame for nothing. The keyframes are already gated on .is-flipping; the
+   perspective they need is now gated with them, and a figure that is not
+   moving is plain 2D text again. */
+.ll-figures.is-flipping .ll-fig-value { perspective: 460px; }
 
 /* ================================================= arrivals / departures */
 
@@ -843,9 +850,21 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
 .ll-col-sum {
   font-size: var(--t-small); font-weight: 700; color: var(--ink-2); letter-spacing: 0.02em;
 }
+/* No scroll snapping here, and it is not a matter of taste.
+   The list carried `scroll-snap-type: y proximity` with `scroll-snap-align:
+   start` on every row, so the browser pulled each scroll to the nearest row
+   edge. Measured with 40px wheel deltas over the departures list, the list
+   advanced 54, 60, 61, 61, 62, 61, 58, 25, 45, 55, 63, 62, 62, 43 — every
+   notch a different distance, none of them the distance asked for. That is
+   the shifting people report when they scroll the board: not a layout bug,
+   a scroll position the page keeps overriding.
+
+   Snapping earns its keep on a pager, where every stop is a destination. A
+   ledger is a continuous list of rows people read past, and the rows are
+   61px, so the snap was never more than a rounding error away from where the
+   scroll already was — all of the jerk, none of the use. */
 .ll-rows {
   max-height: 336px; overflow-y: auto;
-  scroll-snap-type: y proximity;
   -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 52px), transparent 100%);
   mask-image: linear-gradient(180deg, #000 calc(100% - 52px), transparent 100%);
 }
@@ -856,7 +875,6 @@ h4 a[href^="#"], h5 a[href^="#"], h6 a[href^="#"] { display: none !important; }
   padding: 9px var(--s5); border-bottom: 1px solid var(--rule);
 }
 .ll-row:last-child { border-bottom: none; }
-.ll-row { scroll-snap-align: start; }
 /* A clickable row says so on hover without turning the board into a page of
    hyperlinks: a faint amber edge on the leading side, and the amount picking
    up the accent. Every row still reads as a row. */
@@ -1154,8 +1172,12 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   opacity: 0.55;
 }
 .ll-cal-day.is-today { box-shadow: inset 0 0 0 1.5px var(--ink); }
-.ll-cal-day:hover { transform: translateY(-2px); box-shadow: var(--lift-1); }
-.ll-cal-day.is-today:hover {
+/* Only the days that turn over lift under the pointer. A future day is not
+   clickable, and a cell that rises when you brush past it is promising
+   something it cannot do. */
+.ll-cal-day.is-live { cursor: pointer; }
+.ll-cal-day.is-live:hover { transform: translateY(-2px); box-shadow: var(--lift-1); }
+.ll-cal-day.is-live.is-today:hover {
   box-shadow: inset 0 0 0 1.5px var(--ink), var(--lift-1);
 }
 .ll-cal-foot {
@@ -1165,7 +1187,112 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 .ll-cal-foot b { color: var(--ink-2); font-weight: 600; }
 @media (prefers-reduced-motion: reduce) {
   .ll-cal-day { transition: none; }
-  .ll-cal-day:hover { transform: none; }
+  .ll-cal-day.is-live:hover { transform: none; }
+}
+
+/* ---- the card turns over ------------------------------------------------
+   A tint says a day was heavy; only the back of the card can say what made it
+   heavy. The whole mechanism is one radio group: the front face is labels,
+   the back face is the panels those labels check, and nothing round-trips to
+   Python — see spending_calendar() in app.py for why a rerun was the wrong
+   answer here.
+
+   perspective on the stage rather than on the card itself: on the card it
+   would be applied AFTER the rotation and the turn would read as a flat
+   scale rather than as a sheet swinging on its edge.
+
+   The front stays in flow so the card keeps the calendar's height in both
+   states; the back is laid over it. backface-visibility hides the far side
+   from view but NOT from the pointer, so each face's pointer-events are
+   switched with the flip — without that, a day cell under the breakdown
+   still swallows clicks meant for the panel on top of it. */
+.ll-flip-stage { perspective: 1400px; max-width: 460px; }
+.ll-flip {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.ll-flip-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.ll-flip-back {
+  position: absolute; inset: 0;
+  transform: rotateY(180deg);
+  pointer-events: none;
+}
+/* Any checked box in the back face means the card is turned. Checkboxes, not
+   a radio group: inside Streamlit's React root a named radio loses its
+   checkedness again before the click finishes — measured, with the CSS ruled
+   out one property at a time. See spending_calendar() in app.py. */
+.ll-cal-panel:has(.ll-flip-back .ll-vr:checked) .ll-flip {
+  transform: rotateY(180deg);
+}
+.ll-cal-panel:has(.ll-flip-back .ll-vr:checked) .ll-flip-front {
+  pointer-events: none;
+}
+.ll-cal-panel:has(.ll-flip-back .ll-vr:checked) .ll-flip-back {
+  pointer-events: auto;
+}
+/* Each box sits immediately before the panel it reveals, which is what keeps
+   this to one static rule instead of a generated selector per day. */
+.ll-day { display: none; }
+.ll-vr:checked + .ll-day {
+  display: flex; flex-direction: column; gap: var(--s3); height: 100%;
+}
+/* Belt and braces. Two days cannot normally be open at once — the front face
+   stops taking clicks the moment the card turns — but boxes do not exclude
+   each other the way a radio group would, so a checked panel that already has
+   a checked panel before it stays down. Reads as: a .ll-day opened by its box,
+   preceded by another .ll-day opened by its box. */
+.ll-vr:checked + .ll-day ~ .ll-vr:checked + .ll-day { display: none; }
+.ll-day-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--s3); padding-bottom: var(--s3);
+  border-bottom: 1px solid var(--rule-2);
+}
+.ll-day-when { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ll-day-when b {
+  font-family: var(--font-board); font-size: var(--t-small); font-weight: 700;
+  letter-spacing: 0.04em; color: var(--ink); white-space: nowrap;
+}
+.ll-day-when span { font-size: var(--t-micro); color: var(--ink-3); }
+.ll-day-total {
+  font-family: var(--font-board); font-size: var(--t-body); font-weight: 700;
+  color: var(--amber); white-space: nowrap; line-height: 1.2;
+}
+.ll-day-total.is-none { color: var(--ink-3); opacity: 0.5; }
+.ll-day-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* Same five-cell rhythm as a Platform load row, so a category reads the same
+   on the back of this card as it does in the panel beside it. */
+.ll-day-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 46px auto auto;
+  align-items: center; gap: var(--s3);
+  padding: 7px 0; border-bottom: 1px solid var(--rule);
+}
+.ll-day-row:last-child { border-bottom: none; }
+.ll-day-bar {
+  height: 4px; border-radius: 99px; overflow: hidden;
+  background: rgba(var(--ink-rgb), 0.09);
+}
+.ll-day-bar i { display: block; height: 100%; border-radius: 99px; }
+.ll-day-none {
+  flex: 1 1 auto; display: flex; align-items: center; justify-content: center;
+  font-size: var(--t-small); color: var(--ink-3);
+}
+.ll-day-close {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: var(--t-micro); font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-3);
+  cursor: pointer; padding: 2px 0;
+  transition: color 140ms var(--ease);
+}
+.ll-day-close:hover { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) {
+  .ll-flip { transition: none; }
+  .ll-day-close { transition: none; }
 }
 .ll-load-item {
   display: grid; grid-template-columns: 30px 1fr auto auto; align-items: center;
@@ -1527,13 +1654,37 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
      declared here, so the width is driven by clamping instead — and a
      max-width jumping straight from a length to 0 snaps shut no matter what
      else is transitioning, which is why closing had no in-between frames.
-     Given a length in BOTH states it animates like any other property. */
+     Given a length in BOTH states it animates like any other property.
+
+     The width has to be a real layout change: the board beside it has to
+     reflow into the room, and no transform can do that. What a transform CAN
+     do is carry the panel's contents, and that is where the closing motion
+     actually lives — see BOT_CLOSED_CSS at the foot of this file.
+
+     Easing is per direction, not per element. Opening runs on the decelerating
+     curve below; closing declares its own accelerating one in the closed-state
+     sheet, because a transition takes its timing from the state it is moving
+     TO. A panel that leaves on an ease-out darts off and then crawls the last
+     few pixels; ease-in lets go of it instead.
+
+     No will-change. It was set to max-width, which is a layout property the
+     compositor cannot take over anyway, so the hint bought nothing and left
+     both of the page's largest columns permanently promoted. */
   max-width: 100%;
   transition: max-width 300ms cubic-bezier(0.22, 0.61, 0.36, 1),
               flex-basis 300ms cubic-bezier(0.22, 0.61, 0.36, 1),
               width 300ms cubic-bezier(0.22, 0.61, 0.36, 1),
               opacity 220ms ease;
-  will-change: max-width;
+}
+/* The rail's stack, in its resting place. It is the closed state that moves
+   this (transform + opacity, nothing the layout has to think about); coming
+   back it snaps home at 0s and lets llRailIn own the entrance, so the panel
+   does not slide twice over itself on the way in. */
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .ll-stage-marker)
+  > [data-testid="stColumn"]:last-child > [data-testid="stVerticalBlock"] {
+  transform: none;
+  opacity: 1;
+  transition: transform 0s, opacity 140ms ease;
 }
 /* On a phone there is no room for the sidebar (left) AND a side-by-side
    board+rail split, so below this width Streamlit's own column stacking
@@ -1557,7 +1708,16 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
     box-shadow: -12px 0 32px var(--board-shadow) !important;
     padding: var(--s4) var(--s4) var(--s5) !important;
     overflow-y: auto !important;
-    transition: transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1) !important;
+    /* Open: sitting on its own edge, visible, and able to slide. The closed
+       state moves it off with translateX rather than squeezing its width to
+       zero — this is a fixed drawer, so there is no column to collapse and
+       collapsing it anyway crushed the panel in place instead of sending it
+       away. visibility rides along at 0s so it can be flipped at the END of
+       the close (see the closed sheet) without fading the panel out early. */
+    transform: none !important;
+    visibility: visible !important;
+    transition: transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+                visibility 0s !important;
   }
   /* The prompts and composer sit at the foot of the panel rather than
      halfway up it: the rail is a fixed-height drawer here, so whatever the
@@ -1576,6 +1736,12 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
     content: ""; position: fixed; inset: 0;
     background: rgba(var(--void-rgb), 0.55);
     z-index: 999; pointer-events: none;
+    /* It used to be switched off with display:none, which is not a thing that
+       can be transitioned: the board behind the drawer went from dimmed to
+       bright in one frame while the drawer was still on screen. Opacity can,
+       and it is composited. */
+    opacity: 1;
+    transition: opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
   }
 }
 /* The close button's column is sized for the control, not the other way
@@ -1852,6 +2018,35 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 [data-testid="stTextArea"] textarea::placeholder { color: var(--ink-3) !important; opacity: 1 !important; }
 [data-testid="stTextInput"] input:focus, [data-testid="stNumberInput"] input:focus,
 [data-testid="stTextArea"] textarea:focus { border-color: var(--amber) !important; }
+/* One border, not two.
+   The two rules above draw a border on the <input> itself, and the shell rule
+   between them draws another on the wrapper Streamlit puts around it — so
+   every text, number and date field was painting two rings 1px apart. Then the
+   shell's own overflow:hidden clipped the inner ring's bottom edge off, which
+   is the "one uncoloured edge" the search box shows: measured on it, the
+   shell's content box is 351x38 and the input sitting in it is 351x39, so
+   three sides carried a doubled line and the fourth carried none.
+
+   The shell keeps the border — it is what the radius and the hover state are
+   already hung on, and it is the box the eye reads as the field. The input
+   inside goes borderless and transparent, and focus moves up to the shell with
+   it, or the amber ring would have nothing left to draw on. :focus-within,
+   not :focus, because the thing taking focus is the input and the thing
+   wearing the border is now its parent. */
+[data-testid="stTextInputRootElement"] > input,
+[data-testid="stNumberInputContainer"] input,
+[data-testid="stDateInputField"] input {
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+[data-testid="stTextInputRootElement"]:focus-within,
+[data-testid="stNumberInputContainer"]:focus-within,
+[data-testid="stDateInputField"]:focus-within {
+  border-color: var(--amber) !important;
+}
+[data-testid="stTextInputRootElement"]:hover,
+[data-testid="stNumberInputContainer"]:hover { border-color: var(--amber) !important; }
 [data-baseweb="select"] svg { color: var(--ink-3) !important; }
 [data-baseweb="popover"] [role="listbox"], [data-baseweb="menu"] {
   background: var(--panel-2) !important; border: 1px solid var(--rule-2) !important;
@@ -2671,8 +2866,15 @@ div.st-key-clear_chat button {
 # simply not emitting it, which is what lets the transition in _CSS_BODY run in
 # both directions: closing adds these widths, opening removes them, and the
 # same elements animate between the two.
+#
+# A transition reads its timing from the state it is moving TO, so declaring
+# the timing here — and only here — is what gives closing a curve of its own
+# without touching opening. It accelerates: the panel is let go of rather than
+# flung, which is what the old shared ease-out made it look like.
 _ROW = ('[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] '
         '.ll-stage-marker)')
+# ease-in. Opening decelerates into place; closing gathers speed as it leaves.
+_SHUT = "cubic-bezier(0.4, 0, 1, 1)"
 BOT_CLOSED_CSS = f"""
 {_ROW} {{ gap: 0 !important; }}
 {_ROW} > [data-testid="stColumn"]:first-child {{
@@ -2682,10 +2884,47 @@ BOT_CLOSED_CSS = f"""
 {_ROW} > [data-testid="stColumn"]:last-child {{
   flex: 0 0 0 !important; width: 0 !important;
   min-width: 0 !important; max-width: 0 !important;
-  opacity: 0 !important; overflow: hidden !important;
+  overflow: hidden !important;
   pointer-events: none !important;
+  transition: max-width 280ms {_SHUT}, flex-basis 280ms {_SHUT},
+              width 280ms {_SHUT} !important;
 }}
-{_ROW}::before {{ content: none !important; display: none !important; }}
+/* The part the compositor can actually carry. The stack inside the column
+   leaves on transform and opacity — no layout, no paint of its own — and it
+   leaves FIRST, so the panel is already gone by the time the edge finishes
+   closing behind it rather than being squeezed flat on the way out. */
+{_ROW} > [data-testid="stColumn"]:last-child > [data-testid="stVerticalBlock"] {{
+  transform: translateX(20px) !important;
+  opacity: 0 !important;
+  transition: transform 200ms {_SHUT}, opacity 150ms {_SHUT} !important;
+}}
+/* On a phone there is no column to collapse — the rail is a fixed drawer — so
+   it keeps its width and slides off its own edge instead. Pure transform, and
+   the scrim fades with it. visibility flips only once the slide is over, which
+   is what the 0s-with-a-delay is for: it keeps the drawer hit-testable and
+   painted for the whole 260ms and then takes it out of the tree. */
+@media (max-width: 680px) {{
+  {_ROW} > [data-testid="stColumn"]:last-child {{
+    flex: 0 0 auto !important;
+    width: min(88vw, 380px) !important;
+    max-width: min(88vw, 380px) !important;
+    overflow: hidden !important;
+    transform: translateX(100%) !important;
+    visibility: hidden !important;
+    transition: transform 260ms {_SHUT},
+                visibility 0s linear 260ms !important;
+  }}
+  {_ROW} > [data-testid="stColumn"]:last-child > [data-testid="stVerticalBlock"] {{
+    transform: none !important; opacity: 1 !important;
+    transition: none !important;
+  }}
+  {_ROW}::before {{ opacity: 0 !important; }}
+}}
+@media (prefers-reduced-motion: reduce) {{
+  {_ROW} > [data-testid="stColumn"]:last-child,
+  {_ROW} > [data-testid="stColumn"]:last-child > [data-testid="stVerticalBlock"],
+  {_ROW}::before {{ transition: none !important; }}
+}}
 """
 
 

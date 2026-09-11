@@ -593,6 +593,28 @@ def _daily_rows(frames: Frames, key: str):
     return [(int(d), c, a) for d, c, a in out if d.isdigit() and 1 <= int(d) <= days]
 
 
+def category_by_day(frames: Frames, key: str) -> dict[int, list[tuple[str, float]]]:
+    """What one day of a month spent, split by category, heaviest first.
+
+    The calendar square already knows a day's total. This is what the back of
+    it needs: the same day broken out, so a dark square can say what made it
+    dark instead of only that something did.
+
+    Built from `_daily_rows`, which is also where the day totals and the
+    sparklines come from — a day cannot add up to one figure on the face of
+    the card and a different one on the back of it.
+
+    Days with nothing spent are simply absent; the caller decides what an empty
+    day should say, and it is not the same sentence as "no data".
+    """
+    out: dict[int, dict[str, float]] = {}
+    for day, category, amount in _daily_rows(frames, key):
+        bucket = out.setdefault(day, {})
+        bucket[category] = bucket.get(category, 0.0) + amount
+    return {day: sorted(cats.items(), key=lambda kv: (-kv[1], kv[0]))
+            for day, cats in out.items()}
+
+
 def category_daily(frames: Frames, key: str) -> dict[str, list[float]]:
     """Cumulative spend per category through one month, day by day.
 

@@ -46,6 +46,9 @@ _PATHS = {
     # --- actions ----------------------------------------------------------
     "plus": '<path d="M12 5.25v13.5"/><path d="M5.25 12h13.5"/>',
     "minus": '<path d="M5.25 12h13.5"/>',
+    # Straight back, on the same 24 grid as the rest. Used by the
+    # spending calendar to turn a flipped day card face-up again.
+    "back": '<path d="M19.5 12h-15"/><path d="m10.5 5.5-6.5 6.5 6.5 6.5"/>',
     "close": '<path d="m6.5 6.5 11 11"/><path d="m17.5 6.5-11 11"/>',
     "check": '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
     "download": ('<path d="M12 3.75v10.5"/><path d="m7.75 10 4.25 4.25L16.25 10"/>'

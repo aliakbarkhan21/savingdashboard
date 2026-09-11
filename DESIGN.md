@@ -333,6 +333,20 @@ The flap's own material stays literal on purpose, and it is material rather than
 - **Label:** the *UI label* role — Barlow 600 at 0.8125rem, sentence case, secondary ink, 5px above the field.
 - **Focus:** border goes amber, plus the global amber focus ring. Every interactive surface keeps that ring.
 
+**One border, and it belongs to the shell.** Streamlit wraps every text, number and
+date field in a shell (`stTextInputRootElement`, `stNumberInputContainer`,
+`stDateInputField`) and puts the real `<input>` inside it. Styling both — which is what
+the sheet did — paints two rings 1px apart, and the shell's own `overflow: hidden` then
+clips the inner ring's **bottom edge off**: measured on the board's search box, the
+shell's content box is 351×38 and the input in it is 351×39, so three sides carried a
+doubled line and the fourth carried none. That missing edge is the whole bug, and it was
+visible on every field in the app, not only the search box.
+
+The shell keeps the border, because it already carries the radius and the hover state and
+it is the box the eye reads as the field. The input goes `border: none` and transparent.
+Focus moves up with the border — `:focus-within` on the shell, not `:focus` on the input,
+since the thing taking focus and the thing wearing the ring are now different elements.
+
 ### Navigation
 Periods are chosen from a **dropdown** in the sidebar, one option per month plus All Time, each carrying that month's outflow in the display currency. Streamlit's selectbox is type-to-filter, so reaching a month two years back is three keystrokes.
 
@@ -424,7 +438,69 @@ Amber, the hue the run strip already gives the month in progress, scaled to the 
 
 Days that have not happened yet are outlined and empty, never counted as quiet: telling someone on the 3rd that they have had a wonderfully frugal month is worse than saying nothing. All Time has no calendar at all — a rhythm needs a month to have a rhythm within — and the Arrivals Ring takes the full width back when there is nothing to pair it with.
 
+**Every day that has happened turns the card over.** A tint says a day was heavy; only the back of the card can say what made it heavy, and that is the question a heavy square actually provokes. Each elapsed day is a `<label>` over a hidden checkbox, and checking one rotates the card on `rotateY` to that day's breakdown — platform chip, name, share bar, percentage, amount, in the same five-cell rhythm a Platform Load row uses, so a category reads the same on both. A quiet day turns over too, and says so in a sentence rather than as three zeros. Future days do not: they have no breakdown, and a cell that lifts under the pointer is promising something it cannot do.
+
+Nothing round-trips to Python. The whole month renders once and the browser does the rest — the same bargain the Share/Trend switch strikes. A Streamlit callback would cost a full script run, the entire board rebuilt and the flaps re-evaluated, to show something the page already had in hand, and the flip would land *after* the rerun rather than under the finger.
+
+**Checkboxes, not a radio group, and that is measured rather than preferred.** One radio group is the obvious fit — one day open at a time, for free — and it does not work inside Streamlit's React root: a click on a named radio sets checkedness during dispatch and has lost it again before the event finishes, with no `change` event and `defaultPrevented` false all the way to the window. The same markup works on `document.body`; cloning the nodes makes them work in place; disabling the transform, the backface, the pointer-events swap and the display swap one at a time changes nothing. So it is those nodes and React's delegated listener between them, not the CSS. Checkboxes are unaffected — the Share/Trend switch has been one all along. Anything in this codebase reaching for a radio group in injected HTML should expect the same and reach for checkboxes instead.
+
+What a checkbox costs is that nothing unchecks the last day for you, so each panel carries its own **Back to the month** label pointing at its own box, the front face goes `pointer-events: none` while the card is turned (backface-visibility hides the far side from view but *not* from the pointer), and the sheet keeps a belt-and-braces rule that shows only the first checked panel. `perspective` sits on the stage, not on the card: on the card it would be applied after the rotation and the turn would read as a flat scale rather than a sheet swinging on its edge. The trade-off worth stating: a `display: none` input is not in the tab order, so the flip is pointer-only, which is why every cell keeps its hover title.
+
 Every row of the grid is already a week, so each one takes **its own total in the margin**, the way a spreadsheet totals a row. It costs no new concept, it fills the column the grid was otherwise leaving empty beside it, and it answers what the squares only imply: which week actually cost you. The total is not an eighth day — no fill, no border, the board's tabular face, right-aligned — and the grid's seven day columns share the room equally with the margin taking only what its figures need, so a wider panel grows the squares rather than the numbers. Cells are emitted week by week rather than day by day so the total can be closed off at the right point, including a short first week and a month that does not end on a Sunday.
+
+### The Ledger Scroll Region
+The Arrivals and Departures logs cap at 336px with a 52px mask fade at the foot. They do
+**not** snap.
+
+They used to. `scroll-snap-type: y proximity` on the list with `scroll-snap-align: start`
+on every row meant the browser pulled each scroll to the nearest row edge — measured with
+40px wheel deltas over the departures log, the list advanced 54, 60, 61, 61, 62, 61, 58,
+25, 45, 55, 63, 62, 62, 43. Every notch a different distance and none of them the distance
+asked for. That is the shifting people report when they scroll the board: not a layout
+bug, a scroll position the page keeps overriding. After removal, 40px of wheel moves
+exactly 40px, and the board is pixel-identical when sampled at scroll offsets 100px apart.
+
+Snapping earns its keep on a pager, where every stop is a destination. A ledger is a
+continuous list people read past, and the rows are 61px, so the snap was never more than
+a rounding error from where the scroll already was — all of the jerk, none of the use.
+
+Related, and found in the same pass: `perspective: 460px` sat on all four `.ll-fig-value`
+figures unconditionally, giving the largest type on the board a permanent 3D rendering
+context for the sake of one 560ms flap animation. The keyframes were already gated on
+`.is-flipping`; the perspective is now gated with them, and a figure that is not moving is
+plain 2D text again.
+
+### The Rail Opens And Closes
+Opening and closing are not the same motion and no longer share a curve. A transition
+takes its timing from the state it is moving **to**, so the open curve lives on the base
+rule and the close curve lives in the closed-state sheet — one property, two directions,
+no JavaScript. Opening decelerates in on `cubic-bezier(0.22, 0.61, 0.36, 1)`; closing
+accelerates out on `cubic-bezier(0.4, 0, 1, 1)`. A panel that leaves on an ease-out darts
+off and then crawls the last few pixels; ease-in lets go of it instead.
+
+On **desktop** the column's width has to be a real layout change — the board beside it has
+to reflow into the room, and no transform can do that. What a transform can do is carry
+the panel's *contents*, so the stack inside the column leaves on `translateX(20px)` and
+`opacity`, and it leaves first: measured frame by frame, opacity is at 0 by 150ms while
+the column is still 156px wide and closing, so the panel is gone before the edge shuts
+rather than being squeezed flat on the way out. The width steps 275 → 250 → 225 → 193 →
+156 → 115 → 46 → 0, accelerating, which is the ease-in doing its job.
+
+On **a phone** there is no column to collapse: the rail is a `position: fixed` drawer, and
+the closed state was collapsing its width to zero anyway, which crushed the panel in place
+instead of sending it anywhere. It now keeps its width and slides off its own edge on
+`translateX(100%)` — measured 0 → 39 → 79 → 103 → 156 → 216 → 248 → 282 → 318 → 378px
+over ~300ms, entirely on the compositor. `visibility: hidden` rides a `0s` transition with
+a 260ms delay so it flips at the *end* of the slide, keeping the drawer painted for the
+whole of it.
+
+The dim scrim behind the drawer was switched off with `display: none`, which is not a
+property that can be transitioned: the board went from dimmed to bright in one frame while
+the drawer was still on screen. It fades on opacity now.
+
+`will-change: max-width` is gone. It hinted at a layout property the compositor cannot
+take over, so it bought nothing and left both of the page's largest columns permanently
+promoted.
 
 ### Command Palette
 Ctrl/Cmd+K. An overlay in the parent document at `--radius-lg` on `--lift-3`, themed from the board's own custom properties. Choosing an item clicks an off-screen Streamlit button — the same bridge idea the board rows use — or, for a filter, drives the toolbar's existing search box rather than introducing a second filter with its own rules. It does not intercept Ctrl+K while focus is in the bot composer, where that chord belongs to the text field.

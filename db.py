@@ -46,12 +46,25 @@ _UNIT_FLAG = "amount_unit"
 #            obligation is real, but your cash on hand did not move — and it
 #            must not, or the ledger invents money that was never in your hand.
 #            Only settling it moves cash.
+#   OWED     nothing was handed over and nothing was bought: money you have
+#            earned and not been paid. A salary running late, an invoice out,
+#            a deposit due back. Same cash arithmetic as COVERED — no opening
+#            leg, cash only on settlement — and a separate value because it is
+#            a different fact about your life, and the board, the debts table
+#            and the bot all say a different sentence about it. Only ever
+#            written on the `lent` side: it is money owed TO you.
+#
+# The arithmetic is binary and stays binary: every place in finance.py that
+# cares asks `kind == db.CASH`, so a new non-cash value needs no changes there
+# and cannot silently invent an opening leg. Grep for db.CASH before adding a
+# fourth.
 #
 # Every row written before this column existed was a real cash transfer, so
 # CASH is the default and the migration backfills it.
 CASH = "cash"
 COVERED = "covered"
-KINDS = (CASH, COVERED)
+OWED = "owed"
+KINDS = (CASH, COVERED, OWED)
 
 
 def clean_kind(value):
