@@ -1016,10 +1016,22 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
    The board itself is deliberately NOT in this list: it is the object the whole
    page is about, it already carries the one ambient drop, and a page that
    shrugs when the pointer crosses it reads as loose rather than responsive. */
+/* No will-change. It said `transform`, and it was never removed, so every
+   panel and every person card sat on its own compositor layer for the whole
+   life of the page — nine of them, measured. That is what made the board
+   jiggle under a fast scroll: a promoted layer is composited separately from
+   the content around it, and at speed the two drift a pixel out of step, so
+   every promoted box shimmers against its neighbours. The hairline borders
+   show it worst, which is why it read as the panels themselves wobbling.
+
+   will-change is a hint you set immediately before a change and take away
+   afterwards, not a decoration. A 160ms transform on hover needs no hint at
+   all; browsers promote for the duration of a running transition on their
+   own. Same mistake, same fix, as the `will-change: max-width` that used to
+   sit on the bot rail's columns. */
 .ll-panel, .ll-person {
   transition: transform 160ms var(--ease), box-shadow 160ms var(--ease),
               border-color 160ms var(--ease);
-  will-change: transform;
 }
 .ll-panel:hover, .ll-person:hover {
   transform: translateY(-3px);
