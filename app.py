@@ -589,6 +589,54 @@ def spending_calendar(frames, snap) -> str:
     today = date.today().day if snap.key == CURRENT_PERIOD else days
     elapsed = min(today, days)
     by_day = finance.category_by_day(frames, snap.key)
+    # How many week rows the grid ends up with. The open card reads this to
+    # size itself, so it has to be the real count and not an assumed five.
+    week_rows = (lead + days + 6) // 7
+    month_name = finance.month_label(snap.key).split()[0]
+
+    def day_back(day: int) -> str:
+        """The face a lifted day turns over onto: its platforms and amounts."""
+        rows = by_day.get(day, [])
+        spent = sum(a for _, a in rows)
+        weekday = _DOW_FULL[(lead + day - 1) % 7]
+        # A day with nothing on it says so once, in the body. Repeating it as
+        # "0 platforms" and "Rs. 0" in the header is three ways of saying the
+        # same nothing, and the only one worth reading is the sentence.
+        if rows:
+            meta = f'{len(rows)} platform{"s" if len(rows) != 1 else ""}'
+            total = f'<div class="ll-day-total">{finance.money(spent, 0)}</div>'
+        else:
+            meta = 'a quiet day'
+            total = '<div class="ll-day-total is-none">&mdash;</div>'
+        out = ['<div class="ll-day-face ll-day-back">'
+               '<div class="ll-day-head"><div class="ll-day-when">'
+               f'<b>{weekday} {day} {esc(month_name)}</b>'
+               f'<span>{meta}</span></div>{total}</div>']
+        if rows:
+            out.append('<div class="ll-day-list">')
+            for category, value in rows:
+                share = value / spent * 100 if spent else 0.0
+                colour = theme.platform_color(category)
+                out.append(
+                    '<div class="ll-day-row">'
+                    f'<div class="ll-plat" style="background:{colour}">'
+                    f'{theme.platform_code(category)}</div>'
+                    f'<div class="ll-load-name">{esc(category)}</div>'
+                    '<div class="ll-day-bar">'
+                    f'<i style="width:{share:.1f}%;background:{colour}"></i>'
+                    '</div>'
+                    f'<div class="ll-load-pct">{share:.0f}%</div>'
+                    f'<div class="ll-load-amt">{finance.money(value, 0)}</div>'
+                    '</div>')
+            out.append('</div>')
+        else:
+            out.append('<div class="ll-day-none">Nothing left the account.</div>')
+        # The Back label points at this day's OWN box: unchecking it sets the
+        # day back down, and it is the only way out, since an open card covers
+        # every square in the grid.
+        out.append(f'<label class="ll-day-close" for="llcd-{day}">'
+                   f'{icons.icon("back", 13)}Back to the month</label></div>')
+        return "".join(out)
 
     # Every row of the grid is already a week, so each one takes its own total
     # in the margin — the way a spreadsheet totals a row. It costs no new
@@ -641,9 +689,16 @@ def spending_calendar(frames, snap) -> str:
             cells.append(f'<div class="{" ".join(classes)}" '
                          f'title="{esc(title)}">{day}</div>')
         else:
-            cells.append(f'<label class="{" ".join(classes)} is-live" '
-                         f'for="llcd-{day}"{style} title="{esc(title)}">'
-                         f'{day}</label>')
+            cells.append(
+                f'<div class="ll-cal-cell" style="--col:{(lead + index) % 7};'
+                f'--row:{(lead + index) // 7}">'
+                f'<label class="{" ".join(classes)} is-live" for="llcd-{day}"'
+                f'{style} title="{esc(title)}">{day}</label>'
+                f'<input type="checkbox" id="llcd-{day}" class="ll-vr">'
+                '<div class="ll-day-card"><div class="ll-day-flip">'
+                f'<div class="ll-day-face ll-day-tile"{style}>{day}</div>'
+                f'{day_back(day)}'
+                '</div></div></div>')
         slot += 1
         if slot == 7:
             cells.append(close_week())
@@ -653,54 +708,6 @@ def spending_calendar(frames, snap) -> str:
         # it out so the total still lands in the margin column.
         cells += ['<div class="ll-cal-pad"></div>'] * (7 - slot)
         cells.append(close_week())
-
-    # ---- the back of the card: one panel per day that has happened --------
-    month_name = finance.month_label(snap.key).split()[0]
-    backs = []
-    for day in range(1, elapsed + 1):
-        rows = by_day.get(day, [])
-        spent = sum(a for _, a in rows)
-        weekday = _DOW_FULL[(lead + day - 1) % 7]
-        backs.append(f'<input type="checkbox" id="llcd-{day}" class="ll-vr">')
-        # A day with nothing on it says so once, in the body. Repeating it as
-        # "0 platforms" and "Rs. 0" in the header is three ways of saying the
-        # same nothing, and the only one worth reading is the sentence.
-        if rows:
-            meta = f'{len(rows)} platform{"s" if len(rows) != 1 else ""}'
-            total = f'<div class="ll-day-total">{finance.money(spent, 0)}</div>'
-        else:
-            meta = 'a quiet day'
-            total = '<div class="ll-day-total is-none">&mdash;</div>'
-        head = ('<div class="ll-day-head"><div class="ll-day-when">'
-                f'<b>{weekday} {day} {esc(month_name)}</b>'
-                f'<span>{meta}</span></div>'
-                f'{total}</div>')
-        if rows:
-            body = ['<div class="ll-day-list">']
-            for category, value in rows:
-                share = value / spent * 100 if spent else 0.0
-                colour = theme.platform_color(category)
-                body.append(
-                    '<div class="ll-day-row">'
-                    f'<div class="ll-plat" style="background:{colour}">'
-                    f'{theme.platform_code(category)}</div>'
-                    f'<div class="ll-load-name">{esc(category)}</div>'
-                    '<div class="ll-day-bar">'
-                    f'<i style="width:{share:.1f}%;background:{colour}"></i>'
-                    '</div>'
-                    f'<div class="ll-load-pct">{share:.0f}%</div>'
-                    f'<div class="ll-load-amt">{finance.money(value, 0)}</div>'
-                    '</div>')
-            body.append('</div>')
-            body = "".join(body)
-        else:
-            body = '<div class="ll-day-none">Nothing left the account.</div>'
-        # The Back label points at this day's OWN box: unchecking it is what
-        # turns the card back over, and it is the only way out, since the
-        # front face stops taking clicks while the card is turned.
-        backs.append(f'<div class="ll-day">{head}{body}'
-                     f'<label class="ll-day-close" for="llcd-{day}">'
-                     f'{icons.icon("back", 13)}Back to the month</label></div>')
 
     quiet = sum(1 for i, v in enumerate(daily) if v <= 0 and i < elapsed)
     heaviest = max(range(days), key=lambda i: daily[i])
@@ -715,15 +722,10 @@ def spending_calendar(frames, snap) -> str:
         'Spending rhythm</div>',
         f'<div class="ll-col-sum">{finance.money(sum(daily), 0)}</div>',
         '</div><div class="ll-panel-body">',
-        '<div class="ll-flip-stage"><div class="ll-flip">',
-        '<div class="ll-flip-face ll-flip-front">',
-        '<div class="ll-cal">', *cells, '</div>',
+        f'<div class="ll-cal" style="--rows:{week_rows}">', *cells, '</div>',
         f'<div class="ll-cal-foot">{note} &middot; heaviest was '
         f'<b>{heavy_dow} {heaviest + 1:02d}</b> at '
         f'<b>{finance.money(daily[heaviest], 0)}</b></div>',
-        '</div>',
-        '<div class="ll-flip-face ll-flip-back">', *backs, '</div>',
-        '</div></div>',
         '</div></div>',
     ])
 

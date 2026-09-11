@@ -1123,7 +1123,25 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 .ll-cal {
   display: grid; grid-template-columns: repeat(7, 1fr) auto;
   gap: 4px; max-width: 460px;
+  /* The depth a lifted day comes forward into. On the grid rather than on each
+     square, so every day shares one vanishing point — per-square, a day in the
+     corner would swing around a pivot in the corner and read as toppling over
+     rather than rising. */
+  perspective: 1200px;
 }
+/* A day that can be opened is a CELL, not just a square, and the cell is the
+   frame of reference for everything its card does. Because the cell is square,
+   `100%` inside it is one day wide AND one day tall — which is what lets the
+   open card be written entirely in day-units with no measuring at run time.
+   The card is absolutely positioned, so it never contributes to the cell's
+   size and the grid lays out exactly as it did before. */
+.ll-cal-cell { position: relative; aspect-ratio: 1; transform-style: preserve-3d; }
+.ll-cal-cell > .ll-cal-day { position: absolute; inset: 0; aspect-ratio: auto; }
+/* The lifted day has to paint over the squares that come after it in the DOM.
+   z-index on the card alone is not enough: preserve-3d makes each cell its own
+   stacking context, so the card's z-index only orders it within its own cell
+   and later cells still paint on top. The CELL is the thing that has to rise. */
+.ll-cal-cell:has(.ll-vr:checked) { z-index: 6; }
 /* The margin needs a gutter, not the 4px the day cells sit on: at the grid's
    own gap the totals read as an eighth column of the calendar rather than as
    an annotation beside it. Margin, NOT padding — these cells are right-aligned,
@@ -1190,62 +1208,123 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   .ll-cal-day.is-live:hover { transform: none; }
 }
 
-/* ---- the card turns over ------------------------------------------------
-   A tint says a day was heavy; only the back of the card can say what made it
-   heavy. The whole mechanism is one radio group: the front face is labels,
-   the back face is the panels those labels check, and nothing round-trips to
-   Python — see spending_calendar() in app.py for why a rerun was the wrong
-   answer here.
+/* ---- a day lifts out of the month --------------------------------------
+   The first version of this turned the whole panel over like a page. It
+   answered the question and lost where the answer came from — so now the
+   square you pressed is the thing that moves: it rises off the grid, grows to
+   cover the weeks, and only then turns onto its own figures. The month stays
+   where it is behind it, and coming back is the same motion in reverse.
 
-   perspective on the stage rather than on the card itself: on the card it
-   would be applied AFTER the rotation and the turn would read as a flat
-   scale rather than as a sheet swinging on its edge.
-
-   The front stays in flow so the card keeps the calendar's height in both
-   states; the back is laid over it. backface-visibility hides the far side
-   from view but NOT from the pointer, so each face's pointer-events are
-   switched with the flip — without that, a day cell under the breakdown
-   still swallows clicks meant for the panel on top of it. */
-.ll-flip-stage { perspective: 1400px; max-width: 460px; }
-.ll-flip {
-  position: relative;
+   Two stages, one per element, ordered with transition DELAYS rather than
+   keyframes so that each direction can order itself. The outer .ll-day-card
+   carries the lift (position, size, translateZ); the inner .ll-day-flip
+   carries the turn. A transition takes its timing from the state it is moving
+   TO, so the delays simply swap between the two rules — going out the card
+   travels first and the turn waits 260ms, coming back the turn goes first and
+   the shrink waits. Without that the card folds up while it is still moving,
+   which is the seam this is built to avoid. */
+.ll-day-card {
+  position: absolute;
+  left: 0; top: 0; width: 100%; height: 100%;
   transform-style: preserve-3d;
-  transition: transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  pointer-events: none;
+  transition: left 300ms var(--ease) 250ms,
+              top 300ms var(--ease) 250ms,
+              width 300ms var(--ease) 250ms,
+              height 300ms var(--ease) 250ms,
+              transform 300ms var(--ease) 250ms;
 }
-.ll-flip-face {
+/* Day-units, all of them. Inside the square cell 100% is one day, so -col of
+   them to the left is the first column, seven across is the whole week, and
+   `rows` down is every week of the month. Nothing is measured, nothing breaks
+   when the panel changes width, and the weekday header stays above the card
+   with the week totals beside it — the month stays readable around the day
+   that came out of it. */
+.ll-vr:checked ~ .ll-day-card {
+  left: calc(-1 * var(--col) * (100% + 4px));
+  top: calc(-1 * var(--row) * (100% + 4px));
+  width: calc(7 * (100% + 4px) - 4px);
+  height: calc(var(--rows) * (100% + 4px) - 4px);
+  transform: translateZ(48px);
+  pointer-events: auto;
+  transition: left 300ms var(--ease) 0ms,
+              top 300ms var(--ease) 0ms,
+              width 300ms var(--ease) 0ms,
+              height 300ms var(--ease) 0ms,
+              transform 300ms var(--ease) 0ms;
+}
+.ll-day-flip {
+  position: absolute; inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 300ms var(--ease) 0ms;
+}
+.ll-vr:checked ~ .ll-day-card .ll-day-flip {
+  transform: rotateY(180deg);
+  transition: transform 340ms var(--ease) 260ms;
+}
+.ll-day-face {
+  position: absolute; inset: 0;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
-.ll-flip-back {
-  position: absolute; inset: 0;
+/* The front face IS the square, and it takes over from the real one at the
+   instant of the press: both swap on a 0s transition, so what you see is one
+   square lifting rather than a copy peeling off a duplicate. Coming back, the
+   swap waits 550ms for the card to land. The day's tint is written inline, so
+   this face carries the same colour its square had. */
+.ll-day-tile {
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-tile);
+  background: rgba(var(--ink-rgb), 0.035);
+  font-family: var(--font-board); font-size: var(--t-micro);
+  font-weight: 600; color: var(--ink);
+  opacity: 0;
+  transition: border-radius 300ms var(--ease) 250ms,
+              font-size 300ms var(--ease) 250ms,
+              box-shadow 300ms var(--ease) 250ms,
+              opacity 0s linear 550ms;
+}
+.ll-vr:checked ~ .ll-day-card .ll-day-tile {
+  opacity: 1;
+  border-radius: var(--radius);
+  font-size: 2rem;
+  box-shadow: var(--lift-2);
+  transition: border-radius 300ms var(--ease) 0ms,
+              font-size 300ms var(--ease) 0ms,
+              box-shadow 300ms var(--ease) 0ms,
+              opacity 0s linear 0s;
+}
+.ll-cal-cell > .ll-cal-day {
+  transition: transform 140ms var(--ease), box-shadow 140ms var(--ease),
+              opacity 0s linear 550ms;
+}
+.ll-cal-cell:has(.ll-vr:checked) > .ll-cal-day {
+  opacity: 0; transition: opacity 0s linear 0s;
+}
+/* Opaque, and it clips: the month is directly behind this face, and a
+   translucent one would let the squares read straight through the figures. */
+.ll-day-back {
   transform: rotateY(180deg);
-  pointer-events: none;
+  display: flex; flex-direction: column; gap: var(--s3);
+  padding: var(--s4);
+  border-radius: var(--radius);
+  background: var(--panel-3);
+  border: 1px solid var(--rule-2);
+  box-shadow: var(--lift-3);
+  overflow: hidden;
 }
-/* Any checked box in the back face means the card is turned. Checkboxes, not
-   a radio group: inside Streamlit's React root a named radio loses its
-   checkedness again before the click finishes — measured, with the CSS ruled
-   out one property at a time. See spending_calendar() in app.py. */
-.ll-cal-panel:has(.ll-flip-back .ll-vr:checked) .ll-flip {
-  transform: rotateY(180deg);
+/* One day out at a time. An open card already covers every square in the grid,
+   so this only states the rule rather than leaving the geometry to enforce it. */
+.ll-cal:has(.ll-vr:checked) .ll-cal-day.is-live { pointer-events: none; }
+/* The month recedes while a day is out of it. Only what is still visible needs
+   it — the squares themselves are underneath the card. */
+.ll-cal-dow, .ll-cal-sum { transition: opacity 240ms var(--ease); }
+.ll-cal:has(.ll-vr:checked) .ll-cal-dow,
+.ll-cal:has(.ll-vr:checked) .ll-cal-sum { opacity: 0.35; }
+@media (prefers-reduced-motion: reduce) {
+  .ll-day-card, .ll-day-flip, .ll-day-tile,
+  .ll-cal-cell > .ll-cal-day { transition: none !important; }
 }
-.ll-cal-panel:has(.ll-flip-back .ll-vr:checked) .ll-flip-front {
-  pointer-events: none;
-}
-.ll-cal-panel:has(.ll-flip-back .ll-vr:checked) .ll-flip-back {
-  pointer-events: auto;
-}
-/* Each box sits immediately before the panel it reveals, which is what keeps
-   this to one static rule instead of a generated selector per day. */
-.ll-day { display: none; }
-.ll-vr:checked + .ll-day {
-  display: flex; flex-direction: column; gap: var(--s3); height: 100%;
-}
-/* Belt and braces. Two days cannot normally be open at once — the front face
-   stops taking clicks the moment the card turns — but boxes do not exclude
-   each other the way a radio group would, so a checked panel that already has
-   a checked panel before it stays down. Reads as: a .ll-day opened by its box,
-   preceded by another .ll-day opened by its box. */
-.ll-vr:checked + .ll-day ~ .ll-vr:checked + .ll-day { display: none; }
 .ll-day-head {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: var(--s3); padding-bottom: var(--s3);
