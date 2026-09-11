@@ -1139,7 +1139,20 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
      square, so every day shares one vanishing point — per-square, a day in the
      corner would swing around a pivot in the corner and read as toppling over
      rather than rising. */
+  /* Only while a day is actually out. Left on permanently this put the grid,
+     every cell, every card and both of its faces on their own compositor
+     layers - 35 of them, measured, sitting there doing nothing whenever the
+     calendar was simply being looked at. Under a fast scroll that many
+     promoted layers drift a pixel out of step with the content around them and
+     the whole board shimmers. transition-behavior: allow-discrete with a delay
+     is what keeps the depth alive through the closing turn: the property is
+     not interpolable, so it flips in one step, and the step is timed to land
+     after the card has set back down rather than the instant it is unchecked. */
+  transition: perspective 0s linear 620ms;
+}
+.ll-cal:has(.ll-vr:checked) {
   perspective: 1200px;
+  transition: perspective 0s linear 0s;
 }
 /* A day that can be opened is a CELL, not just a square, and the cell is the
    frame of reference for everything its card does. Because the cell is square,
@@ -1147,7 +1160,15 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
    open card be written entirely in day-units with no measuring at run time.
    The card is absolutely positioned, so it never contributes to the cell's
    size and the grid lays out exactly as it did before. */
-.ll-cal-cell { position: relative; aspect-ratio: 1; transform-style: preserve-3d; }
+.ll-cal-cell {
+  position: relative; aspect-ratio: 1;
+  transition-behavior: allow-discrete;
+  transition: transform-style 0s linear 620ms;
+}
+.ll-cal-cell:has(.ll-vr:checked) {
+  transform-style: preserve-3d;
+  transition: transform-style 0s linear 0s;
+}
 .ll-cal-cell > .ll-cal-day { position: absolute; inset: 0; aspect-ratio: auto; }
 /* The lifted day has to paint over the squares that come after it in the DOM.
    z-index on the card alone is not enough: preserve-3d makes each cell its own
@@ -1238,9 +1259,10 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 .ll-day-card {
   position: absolute;
   left: 0; top: 0; width: 100%; height: 100%;
-  transform-style: preserve-3d;
   pointer-events: none;
-  transition: left 300ms var(--ease) 250ms,
+  transition-behavior: allow-discrete;
+  transition: transform-style 0s linear 620ms,
+              left 300ms var(--ease) 250ms,
               top 300ms var(--ease) 250ms,
               width 300ms var(--ease) 250ms,
               height 300ms var(--ease) 250ms,
@@ -1257,9 +1279,15 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
   top: calc(-1 * var(--row) * (100% + 4px));
   width: calc(7 * (100% + 4px) - 4px);
   height: calc(var(--rows) * (100% + 4px) - 4px);
-  transform: translateZ(48px);
+  /* No translateZ. It pushed the card 48px towards the viewer, which the
+     perspective then projected about 4% larger - and a 3D-transformed layer is
+     rasterised at its layout size and scaled, so every figure on the card came
+     out soft. The card already grows from one square to the whole grid; that
+     IS the move outward, and it costs nothing in sharpness. */
+  transform-style: preserve-3d;
   pointer-events: auto;
-  transition: left 300ms var(--ease) 0ms,
+  transition: transform-style 0s linear 0s,
+              left 300ms var(--ease) 0ms,
               top 300ms var(--ease) 0ms,
               width 300ms var(--ease) 0ms,
               height 300ms var(--ease) 0ms,
@@ -1267,12 +1295,15 @@ label.ll-row-more:hover .ll-row-more-label { color: var(--amber); }
 }
 .ll-day-flip {
   position: absolute; inset: 0;
-  transform-style: preserve-3d;
-  transition: transform 300ms var(--ease) 0ms;
+  transition-behavior: allow-discrete;
+  transition: transform 300ms var(--ease) 0ms,
+              transform-style 0s linear 620ms;
 }
 .ll-vr:checked ~ .ll-day-card .ll-day-flip {
   transform: rotateY(180deg);
-  transition: transform 340ms var(--ease) 260ms;
+  transform-style: preserve-3d;
+  transition: transform 340ms var(--ease) 260ms,
+              transform-style 0s linear 0s;
 }
 .ll-day-face {
   position: absolute; inset: 0;
